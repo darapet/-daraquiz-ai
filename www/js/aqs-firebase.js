@@ -409,15 +409,26 @@ async function actionSocialLogin(data) {
         throw new Error('Unsupported social provider: ' + provider);
     }
 
-    /* signInWithPopup is blocked by the Android WebView — it opens nothing and
-       silently hangs.  Detect native Capacitor and give a friendly error instead
-       so the app does not freeze.  Users should use email/password on mobile. */
+    /* On native Android/iOS, signInWithPopup is completely blocked by the WebView.
+       Instead we use the @codetrix-studio/capacitor-google-auth native plugin which
+       triggers the real Google Sign-In sheet and returns an ID token we can pass
+       directly to Firebase signInWithCredential — no popup needed. */
     var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    var cred;
     if (isNative) {
-        throw new Error('Google sign-in is not supported in the Android app. Please sign in with your email and password instead.');
+        var GoogleAuthPlugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.GoogleAuth;
+        if (!GoogleAuthPlugin) {
+            throw new Error('Google sign-in is not available on this device. Please sign in with email and password.');
+        }
+        /* Trigger the native Google account chooser */
+        var googleUser = await GoogleAuthPlugin.signIn();
+        var idToken = googleUser && googleUser.authentication && googleUser.authentication.idToken;
+        if (!idToken) throw new Error('Google sign-in failed — no ID token returned. Please try again.');
+        /* Exchange the ID token for a Firebase credential */
+        cred = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    } else {
+        cred = await signInWithPopup(auth, authProvider);
     }
-
-    var cred = await signInWithPopup(auth, authProvider);
     var user = cred.user;
 
     /* Check if user doc already exists */
@@ -1913,20 +1924,9 @@ function _updateAqsGlobals(user, profile) {
         var googleBtn = document.getElementById('aqs-google-login');
         if (!googleBtn) return;
 
-        /* On native Android/iOS hide the Google button entirely —
-           signInWithPopup is blocked by the WebView, so showing it
-           would only confuse users.  Email/password login works fine. */
-        var _isNativeBtn = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-        if (_isNativeBtn) {
-            googleBtn.style.display = 'none';
-            /* Also hide any "— or —" divider that sits above/below the Google button */
-            var divider = googleBtn.closest('.aqs-social-divider') ||
-                          googleBtn.previousElementSibling ||
-                          document.querySelector('.aqs-or-divider, .aqs-social-sep');
-            if (divider && /or/i.test(divider.textContent)) divider.style.display = 'none';
-            return;
-        }
-
+        /* Google button is shown on all platforms.
+           On native Android the native plugin handles it (no popup).
+           On web signInWithPopup is used as normal. */
         googleBtn.addEventListener('click', async function() {
             googleBtn.disabled = true;
             googleBtn.textContent = 'Connecting…';
