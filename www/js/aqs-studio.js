@@ -13,11 +13,6 @@
     var uploadedFileName    = null; // original filename shown in UI
     var pendingFileContext  = null; // { content, name } — injected once into next API call
 
-    /* ─── Image upload state ─── */
-    var uploadedImageData   = null; // base64 data URL of attached image
-    var uploadedImageName   = null; // filename for display
-    var pendingImageData    = null; // cleared after use in callAI()
-
     /* ─── Storage key ─── */
     var HISTORY_KEY = 'xzily_chat_history';
 
@@ -44,7 +39,7 @@
         /* Run each setup step in its own try-catch so one failure never
            silently prevents the rest (e.g. file upload, voice) from loading */
         var steps = [setupMarked, setupInput, setupSidebar, setupSuggestions,
-                     setupNewChat, setupFileUpload, setupImageUpload, setupVoice, renderHistoryList];
+                     setupNewChat, setupFileUpload, setupVoice, renderHistoryList];
         steps.forEach(function (fn) {
             try { fn(); } catch (e) { /* isolated — continues to next step */ }
         });
@@ -64,35 +59,14 @@
     var currentStudioAudio = null; /* Pollinations audio element for studio TTS */
 
     /* ── Groq browser call — auto-retries with next key on 429 ── */
-    async function callGroq(apiMessages, imageDataUrl) {
+    async function callGroq(apiMessages) {
         if (typeof window.groqFetch !== 'function') return null;
         try {
             var ctrl = new AbortController();
             var tid  = setTimeout(function () { ctrl.abort(); }, 20000);
-
-            /* When image attached, use a Groq vision-capable model and wrap
-               the last user message as a multimodal content array */
-            var groqMessages = apiMessages;
-            var groqModel    = 'llama-3.1-8b-instant';
-            if (imageDataUrl) {
-                groqModel    = 'meta-llama/llama-4-scout-17b-16e-instruct';
-                groqMessages = apiMessages.map(function (m, idx) {
-                    if (idx === apiMessages.length - 1 && m.role === 'user') {
-                        return {
-                            role: 'user',
-                            content: [
-                                { type: 'text',      text: typeof m.content === 'string' ? m.content : 'Analyse this image.' },
-                                { type: 'image_url', image_url: { url: imageDataUrl } }
-                            ]
-                        };
-                    }
-                    return m;
-                });
-            }
-
             var res  = await window.groqFetch({
-                model:       groqModel,
-                messages:    groqMessages,
+                model:       'llama-3.1-8b-instant',
+                messages:    apiMessages,
                 max_tokens:  2048,
                 temperature: 0.7
             }, { signal: ctrl.signal });
@@ -139,34 +113,18 @@
     }
 
     /* ── Pollinations direct (no key required — last resort fallback) ── */
-    async function callPollinations(apiMessages, imageDataUrl) {
-        var models = imageDataUrl ? ['openai'] : ['openai', 'mistral', 'llama'];
+    async function callPollinations(apiMessages) {
+        var models = ['openai', 'mistral', 'llama'];
         for (var mi = 0; mi < models.length; mi++) {
             try {
                 var ctrl = new AbortController();
                 var tid  = setTimeout(function () { ctrl.abort(); }, 30000);
-                /* Vision-aware messages: wrap last user msg with content array if image attached */
-                var visionMessages = apiMessages;
-                if (imageDataUrl) {
-                    visionMessages = apiMessages.map(function (m, vidx) {
-                        if (vidx === apiMessages.length - 1 && m.role === 'user') {
-                            return {
-                                role: 'user',
-                                content: [
-                                    { type: 'text',      text: typeof m.content === 'string' ? m.content : 'Analyse this image.' },
-                                    { type: 'image_url', image_url: { url: imageDataUrl } }
-                                ]
-                            };
-                        }
-                        return m;
-                    });
-                }
                 var res  = await fetch('https://text.pollinations.ai/openai', {
                     method:  'POST',
                     headers: { 'Content-Type': 'application/json' },
                     signal:  ctrl.signal,
                     body: JSON.stringify({
-                        messages:    visionMessages,
+                        messages:    apiMessages,
                         model:       models[mi],
                         max_tokens:  1024,
                         temperature: 0.7,
@@ -187,30 +145,26 @@
     }
 
     /* ── AI call — sequential: Groq → Pollinations → proxy ── */
-    async function raceAI(apiMessages, imageDataUrl) {
-        /* 1. Groq direct — primary AI. Supports vision via llama-4-scout when image attached */
-        var groqResult = await callGroq(apiMessages, imageDataUrl);
+    async function raceAI(apiMessages) {
+        /* 1. Groq direct — fastest & best quality (key saved via 🔑 button) */
+        var groqResult = await callGroq(apiMessages);
         if (groqResult) return groqResult;
 
-        /* 2. Pollinations — fallback (also supports vision via openai model) */
-        var pollResult = await callPollinations(apiMessages, imageDataUrl);
+        /* 2. Pollinations direct — free, no key, works from browser immediately */
+        var pollResult = await callPollinations(apiMessages);
         if (pollResult) return pollResult;
 
-        /* 3. Server proxy — last resort (text only) */
-        if (!imageDataUrl) {
-            var proxyResult = await callViaProxy(apiMessages);
-            if (proxyResult) return proxyResult;
-        }
+        /* 3. Server proxy — last resort only */
+        var proxyResult = await callViaProxy(apiMessages);
+        if (proxyResult) return proxyResult;
 
         return null;
     }
 
     /* ── Main entry point called by sendMessage() ── */
     async function callAI() {
-        var fileCtx  = pendingFileContext;
+        var fileCtx = pendingFileContext;
         pendingFileContext = null;
-        var imageUrl = pendingImageData;
-        pendingImageData  = null;
 
         /* Build messages — inject file content into last user message */
         var apiMessages = [{ role: 'system', content: SYSTEM }].concat(
@@ -226,7 +180,7 @@
             })
         );
 
-        var winner = await raceAI(apiMessages, imageUrl);
+        var winner = await raceAI(apiMessages);
 
         showTyping(false);
 
@@ -252,9 +206,8 @@
         if (isStreaming) return;
         var input = document.getElementById('dts-input');
         var text  = (input.value || '').trim();
-        if (!text && !uploadedFileContent && !uploadedImageData) return;
+        if (!text && !uploadedFileContent) return;
         if (!text && uploadedFileContent) text = 'Please analyse the attached file.';
-        if (!text && uploadedImageData)   text = 'Please describe and analyse this image.';
 
         var welcome = document.getElementById('dts-welcome');
         if (welcome) welcome.style.display = 'none';
@@ -272,18 +225,8 @@
             clearFileAttachment();
         }
 
-        /* Capture image before clearing state */
-        var attachedImageData = null;
-        var attachedImageName = null;
-        if (uploadedImageData) {
-            pendingImageData  = uploadedImageData;
-            attachedImageData = uploadedImageData;
-            attachedImageName = uploadedImageName;
-            clearImageAttachment();
-        }
-
         messages.push({ role: 'user', content: text });
-        appendUserMessage(text, attachedFile, attachedImageData, attachedImageName);
+        appendUserMessage(text, attachedFile);
         input.value = '';
         input.style.height = 'auto';
         document.getElementById('dts-send').disabled = true;
@@ -1031,68 +974,6 @@
         if (s) { s.innerHTML = ''; s.style.display = 'none'; }
     }
 
-    /* ─── Image attachment helpers ─── */
-    function setupImageUpload() {
-        var imgInput = document.getElementById('dts-image-input');
-        if (!imgInput) return;
-        imgInput.addEventListener('change', function () {
-            var file = this.files[0];
-            if (!file) return;
-            this.value = '';
-            if (!file.type.startsWith('image/')) {
-                alert('Please select an image file.');
-                return;
-            }
-            if (file.size > 10 * 1024 * 1024) {
-                alert('Image too large — please use an image under 10 MB.');
-                return;
-            }
-            var reader = new FileReader();
-            reader.onload = function (e) {
-                uploadedImageData = e.target.result;
-                uploadedImageName = file.name;
-                showImagePreview(e.target.result, file.name);
-                document.getElementById('dts-input').focus();
-            };
-            reader.readAsDataURL(file);
-        });
-    }
-
-    function showImagePreview(dataUrl, name) {
-        var wrap = document.getElementById('dts-img-preview-wrap');
-        if (!wrap) return;
-        wrap.innerHTML = '';
-        wrap.style.display = 'flex';
-
-        var thumb = document.createElement('img');
-        thumb.src       = dataUrl;
-        thumb.alt       = name || 'Image';
-        thumb.className = 'dts-img-preview-thumb';
-
-        var label = document.createElement('span');
-        label.className   = 'dts-img-preview-label';
-        label.textContent = name || 'Image';
-
-        var clearBtn = document.createElement('button');
-        clearBtn.className   = 'dts-img-preview-clear';
-        clearBtn.textContent = '✕';
-        clearBtn.title       = 'Remove image';
-        clearBtn.addEventListener('click', clearImageAttachment);
-
-        wrap.appendChild(thumb);
-        wrap.appendChild(label);
-        wrap.appendChild(clearBtn);
-    }
-
-    function clearImageAttachment() {
-        uploadedImageData = null;
-        uploadedImageName = null;
-        var wrap = document.getElementById('dts-img-preview-wrap');
-        if (wrap) { wrap.innerHTML = ''; wrap.style.display = 'none'; }
-        var inp = document.getElementById('dts-image-input');
-        if (inp) inp.value = '';
-    }
-
     function showFileError(msg) {
         var s = document.getElementById('dts-file-status');
         if (!s) return;
@@ -1104,7 +985,7 @@
     }
 
     /* ── Render a user message with optional file chip ── */
-    function appendUserMessage(text, fileName, imageDataUrl, imageName) {
+    function appendUserMessage(text, fileName) {
         var container = document.getElementById('dts-messages');
         if (!container) return;
 
@@ -1118,24 +999,11 @@
         var contentEl = document.createElement('div');
         contentEl.className = 'dts-msg-content';
 
-        /* File chip */
         if (fileName) {
             var chipEl = document.createElement('div');
             chipEl.className   = 'dts-file-chip';
             chipEl.textContent = '📎 ' + fileName;
             contentEl.appendChild(chipEl);
-        }
-
-        /* Image thumbnail (shown above text bubble) */
-        if (imageDataUrl) {
-            var imgWrap = document.createElement('div');
-            imgWrap.className = 'dts-msg-img-wrap';
-            var imgEl = document.createElement('img');
-            imgEl.src       = imageDataUrl;
-            imgEl.alt       = imageName || 'Attached image';
-            imgEl.className = 'dts-msg-img-thumb';
-            imgWrap.appendChild(imgEl);
-            contentEl.appendChild(imgWrap);
         }
 
         var bubbleEl = document.createElement('div');
@@ -1256,7 +1124,7 @@
     }
 
     /* ── Start listening (one utterance, max 15 s) ── */
-    function startVoiceListening() {
+    async function startVoiceListening() {
         if (!voiceActive) return;
         var SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SpeechRec || voiceListening) return;
@@ -1265,6 +1133,23 @@
         setVoiceState('listening');
         setVoiceTranscript('');
 
+          /* ── Request mic permission explicitly before SpeechRecognition.
+             On mobile apps/PWAs, SpeechRecognition alone doesn't trigger the
+             system permission dialog — this getUserMedia call does. ── */
+          try {
+              var micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+              micStream.getTracks().forEach(function(t) { t.stop(); });
+          } catch (micErr) {
+              voiceListening = false;
+              voiceRecog     = null;
+              setVoiceState('error');
+              setVoiceTranscript('Microphone access denied.\nPlease go to your device Settings → App Permissions and allow microphone, then try again.');
+              return;
+          }
+
+          if (!voiceActive) return;
+
+  
         var recog = new SpeechRec();
         recog.lang            = 'en-US';
         recog.continuous      = false;   /* one natural utterance */
