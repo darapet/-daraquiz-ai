@@ -26,6 +26,13 @@ jobs:
           npm init -y
           npm install @capacitor/android
 
+      - name: Fix capacitor.settings.gradle
+        run: |
+          cat > android/capacitor.settings.gradle << 'EOF'
+          include ':capacitor-android'
+          project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
+          EOF
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
