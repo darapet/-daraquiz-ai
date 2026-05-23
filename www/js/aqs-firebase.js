@@ -289,6 +289,11 @@ async function handleAction(data) {
 
         /* ── STUDIO AI PROXY (forwards to Pollinations) ── */
         case 'aqs_studio_ai':     return await actionAiGenerate(data);
+        /* ── IMAGE GALLERY ── */
+        case 'aqs_save_gallery_image':   return await actionSaveGalleryImage(data);
+        case 'aqs_get_gallery_images':   return await actionGetGalleryImages();
+        case 'aqs_delete_gallery_image': return await actionDeleteGalleryImage(data);
+
 
         /* ── ADMIN SETTINGS ── */
         case 'aqs_get_settings':       return await actionGetSettings();
@@ -2046,21 +2051,7 @@ function _updateAqsGlobals(user, profile) {
     /* Note: _aqsFirebaseReady and aqs:firebase:ready are already set/dispatched
        by the patchJQuery IIFE above — no need to duplicate them here. */
 })();
-/* ════════════════════════════════════════════════════════════════
-   GALLERY PATCH for aqs-firebase.js
-   ────────────────────────────────────────────────────────────────
-   HOW TO ADD THIS:
-
-   STEP 1 — In the handleAction() switch/case block, add these 3 lines
-   inside the "AUTH" section (anywhere before the default: case):
-
-        case 'aqs_save_gallery_image':   return await actionSaveGalleryImage(data);
-        case 'aqs_get_gallery_images':   return await actionGetGalleryImages();
-        case 'aqs_delete_gallery_image': return await actionDeleteGalleryImage(data);
-
-   STEP 2 — Paste the three functions below anywhere at the bottom of
-   aqs-firebase.js, before the closing line of the file.
-   ════════════════════════════════════════════════════════════════ */
+/* ── Gallery image functions below ── */
 
 /* ── Save an image URL to the signed-in user's gallery ── */
 async function actionSaveGalleryImage(data) {
