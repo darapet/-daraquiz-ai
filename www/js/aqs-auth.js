@@ -84,6 +84,84 @@
         });
     }
 
+    /* ── Google / Social sign-in button ── */
+    function setupSocialButtons() {
+        var googleBtn = document.getElementById('aqs-google-login');
+        if (!googleBtn) return;
+
+        /* If we're returning from a Google redirect (mobile flow), show loading state */
+        try {
+            if (sessionStorage.getItem('_aqsGoogleRedirectPending')) {
+                sessionStorage.removeItem('_aqsGoogleRedirectPending');
+                googleBtn.disabled = true;
+                googleBtn.textContent = 'Completing sign-in…';
+                showAlert('aqs-login-alert', 'Completing Google sign-in, please wait…', false);
+
+                /* Firebase auth guard in aqs-firebase.js will redirect once auth resolves.
+                   As a safety net, wait 8 s then re-enable the button. */
+                setTimeout(function () {
+                    if (googleBtn.disabled) {
+                        googleBtn.disabled = false;
+                        googleBtn.textContent = 'Continue with Google';
+                        hideAlert('aqs-login-alert');
+                    }
+                }, 8000);
+                return;
+            }
+        } catch (ex) {}
+
+        googleBtn.addEventListener('click', function () {
+            hideAlert('aqs-login-alert');
+            googleBtn.disabled = true;
+            googleBtn.textContent = 'Connecting to Google…';
+
+            /* Wait for Firebase to finish loading if needed */
+            function doGoogleLogin() {
+                window.aqsAjax(
+                    { action: 'aqs_social_login', provider: 'google' },
+                    function (res) {
+                        if (res && res.success && res.data && res.data.redirect) {
+                            showAlert('aqs-login-alert', '✓ Signed in! Redirecting…', false);
+                            setTimeout(function () { window.location.href = res.data.redirect; }, 800);
+                        } else if (res && res.success && !res.data) {
+                            /* signInWithRedirect on mobile — page will navigate away, nothing to do */
+                        } else {
+                            var msg = (res && res.data)
+                                ? (typeof res.data === 'string' ? res.data : (res.data.message || 'Google sign-in failed.'))
+                                : 'Google sign-in failed.';
+                            showAlert('aqs-login-alert', msg, true);
+                            googleBtn.disabled = false;
+                            googleBtn.textContent = 'Continue with Google';
+                        }
+                    },
+                    function (err) {
+                        showAlert('aqs-login-alert', (err && err.message) || 'Google sign-in failed. Please try again.', true);
+                        googleBtn.disabled = false;
+                        googleBtn.textContent = 'Continue with Google';
+                    }
+                );
+            }
+
+            if (typeof window.aqsAjax === 'function') {
+                doGoogleLogin();
+            } else {
+                /* Firebase module may still be loading — wait for its ready event */
+                document.addEventListener('aqs:firebase:ready', function onReady() {
+                    document.removeEventListener('aqs:firebase:ready', onReady);
+                    doGoogleLogin();
+                });
+                /* Safety timeout */
+                setTimeout(function () {
+                    if (typeof window.aqsAjax !== 'function') {
+                        showAlert('aqs-login-alert', 'Firebase is still loading. Please wait a moment and try again.', true);
+                        googleBtn.disabled = false;
+                        googleBtn.textContent = 'Continue with Google';
+                    }
+                }, 6000);
+            }
+        });
+    }
+
     /* ── login form ── */
     function setupLoginForm() {
         var form = document.getElementById('aqs-login-form');
@@ -230,6 +308,7 @@
         setupPasswordToggles();
         setupPasswordStrength();
         setupRoleChips();
+        setupSocialButtons();
         setupLoginForm();
         setupRegisterForm();
         setupLogoutBtns();
