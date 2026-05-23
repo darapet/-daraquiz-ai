@@ -21,47 +21,19 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Capacitor Android
+      - name: Install Node dependencies
         run: |
-          npm init -y
-          npm install @capacitor/android
+          npm install
+          npm install @codetrix-studio/capacitor-google-auth
 
-      - name: Fix capacitor.settings.gradle
-        run: |
-          cat > android/capacitor.settings.gradle << 'EOF'
-          include ':capacitor-android'
-          project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
-          EOF
+      - name: Sync Capacitor plugins into Android
+        run: npx cap sync android
 
-      - name: Copy web assets into Android project
-        run: |
-          mkdir -p android/app/src/main/assets/public
-          cp -r www/. android/app/src/main/assets/public/
-
-      - name: Set up JDK 21
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
-
-      - name: Generate debug keystore and print SHA-1
-        run: |
-          mkdir -p ~/.android
-          keytool -genkeypair -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android \
-            -keypass android \
-            -dname "CN=Android Debug,O=Android,C=US"
-          echo "=== YOUR SHA-1 FINGERPRINT ==="
-          keytool -list -v \
-            -keystore ~/.android/debug.keystore \
-            -alias androiddebugkey \
-            -storepass android \
-            -keypass android | grep SHA1
 
       - name: Fix missing capacitor-cordova-android-plugins
         run: |
@@ -128,6 +100,9 @@ jobs:
           <application></application>
           </manifest>
           EOF
+
+          echo "Done! Files created:"
+          ls android/capacitor-cordova-android-plugins/
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
