@@ -17,6 +17,8 @@ import {
     updateProfile,
     GoogleAuthProvider,
     signInWithPopup,
+    signInWithRedirect,
+    getRedirectResult,
     signInWithCredential,
     setPersistence,
     browserLocalPersistence
@@ -397,6 +399,13 @@ async function actionRegister(data) {
     };
 }
 
+/* ── Mobile browser detection for auth flow ── */
+function _isMobileBrowser() {
+    return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())
+        ? false  /* native — handled separately */
+        : /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 /* ── Google / Social Sign-In ── */
 async function actionSocialLogin(data) {
     var provider = data.provider || 'google';
@@ -426,6 +435,13 @@ async function actionSocialLogin(data) {
         if (!idToken) throw new Error('Google sign-in failed — no ID token returned. Please try again.');
         /* Exchange the ID token for a Firebase credential */
         cred = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+    } else if (_isMobileBrowser()) {
+        /* On mobile web browsers signInWithPopup opens a new tab/window that the
+           OS then closes, causing the app to close too.  Use redirect instead —
+           the page reloads automatically and getRedirectResult() picks up the
+           credential after the OAuth dance completes. */
+        await signInWithRedirect(auth, authProvider);
+        return { success: false, redirect_pending: true }; /* page will reload */
     } else {
         cred = await signInWithPopup(auth, authProvider);
     }
@@ -1918,6 +1934,54 @@ function _updateAqsGlobals(user, profile) {
             }
         });
     }
+
+    /* ── Handle redirect result after mobile OAuth ── */
+    /* When signInWithRedirect completes, Firebase redirects back to our page.
+       We must call getRedirectResult() once on page load to pick up the credential. */
+    (async function _handleRedirectResult() {
+        try {
+            var result = await getRedirectResult(auth);
+            if (!result || !result.user) return; /* no redirect in progress */
+            /* Redirect result found — treat it as a successful social login */
+            var user = result.user;
+            var profileRef = doc(db, 'users', user.uid);
+            var profileDoc = await getDoc(profileRef);
+            if (!profileDoc.exists()) {
+                /* New user via redirect — auto-create profile */
+                var displayName = user.displayName || '';
+                var emailLocal  = (user.email || '').split('@')[0];
+                var baseUsername = (displayName.replace(/\s+/g, '').toLowerCase() || emailLocal).substring(0, 20);
+                var finalUsername = baseUsername;
+                var collision = await getDoc(doc(db, 'usernames', finalUsername));
+                if (collision.exists()) finalUsername = baseUsername + Math.floor(1000 + Math.random() * 9000);
+                var now = serverTimestamp();
+                var profileData = {
+                    uid: user.uid, username: finalUsername,
+                    display_name: user.displayName || displayName,
+                    email: user.email || '', role: 'student',
+                    created_at: now, last_login: now,
+                    photo_url: user.photoURL || ''
+                };
+                await setDoc(profileRef, profileData);
+                await setDoc(doc(db, 'usernames', finalUsername), { uid: user.uid });
+            } else {
+                await updateDoc(profileRef, { last_login: serverTimestamp() });
+            }
+            /* Navigate to dashboard */
+            try {
+                var snap = await getDoc(doc(db, 'users', user.uid));
+                var role = snap.exists() ? (snap.data().role || 'student') : 'student';
+                window.location.href = (role === 'host' || role === 'admin') ? 'dashboard.html' : 'user-dashboard.html';
+            } catch(_) {
+                window.location.href = 'user-dashboard.html';
+            }
+        } catch(e) {
+            /* Non-fatal — no redirect was in progress */
+            if (e.code !== 'auth/null-provider-id') {
+                console.warn('[AQS] getRedirectResult error:', e.code || e.message);
+            }
+        }
+    })();
 
     /* ── Wire up Google sign-in buttons on login/register pages ── */
     document.addEventListener('DOMContentLoaded', function() {
