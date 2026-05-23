@@ -17,6 +17,7 @@ import {
     updateProfile,
     GoogleAuthProvider,
     signInWithPopup,
+    signInWithCredential,
     setPersistence,
     browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
@@ -65,15 +66,26 @@ const auth = getAuth(app);
 const db   = getFirestore(app);
 const rtdb = getDatabase(app);
 
-/* ── Base URL helper: works on GitHub Pages subfolders ──
-   e.g. https://user.github.io/repo/create-quiz.html → https://user.github.io/repo/
-   So generated quiz/challenge links point to the right subfolder. */
+/* ── Base URL helper ──
+   On native Android/iOS (Capacitor) window.location is localhost — use Firebase Hosting instead.
+   On web, derive from the current page URL as before. */
 function _baseUrl() {
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        return 'https://darapet.github.io/smartquiz-system/www/';
+    }
     var href = window.location.href.split('?')[0].split('#')[0];
     return href.substring(0, href.lastIndexOf('/') + 1);
 }
 
 /* ── Helpers ── */
+/* Repairs quiz/challenge URLs that were saved with localhost (from old native builds) */
+function _fixStoredUrl(url, token) {
+    if (!url || url.indexOf('localhost') !== -1 || url.indexOf('capacitor://') !== -1 || url.indexOf('127.0.0.1') !== -1) {
+        return token ? (_baseUrl() + 'take-quiz.html?token=' + token) : '';
+    }
+    return url;
+}
+
 function generateToken(len) {
     len = len || 8;
     var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -397,8 +409,19 @@ async function actionSocialLogin(data) {
         throw new Error('Unsupported social provider: ' + provider);
     }
 
-    await setPersistence(auth, browserLocalPersistence);
-    var cred = await signInWithPopup(auth, authProvider);
+    var cred;
+    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
+        /* Native Android/iOS — use native Google Sign-In plugin */
+        var GoogleAuth = window.Capacitor.Plugins.GoogleAuth;
+        var googleUser = await GoogleAuth.signIn();
+        var idToken = googleUser.authentication.idToken;
+        var firebaseCredential = GoogleAuthProvider.credential(idToken);
+        cred = await signInWithCredential(auth, firebaseCredential);
+    } else {
+        /* Web browser — use popup */
+        await setPersistence(auth, browserLocalPersistence);
+        cred = await signInWithPopup(auth, authProvider);
+    }
     var user = cred.user;
 
     /* Check if user doc already exists */
@@ -553,7 +576,7 @@ async function actionGetQuizzes(data) {
             status:        q.status,
             host_status:   q.host_status || 'active',
             quiz_token:    q.quiz_token || '',
-            quiz_url:      q.quiz_url || '',
+            quiz_url:      _fixStoredUrl(q.quiz_url, q.quiz_token),
             created_at_ms: q.created_at && q.created_at.toDate ? q.created_at.toDate().getTime() : 0
         };
     });
@@ -680,7 +703,7 @@ async function actionDeleteQuiz(data) {
         status:         qData.status || 'draft',
         mode:           qData.mode || 'exam',
         quiz_token:     qData.quiz_token || '',
-        quiz_url:       qData.quiz_url || '',
+        quiz_url:       _fixStoredUrl(qData.quiz_url, qData.quiz_token),
         created_at_str: tsToStr(qData.created_at),
         custom_form:    qData.custom_form || [],
         total_attempts: attArchive.length,
@@ -1039,7 +1062,7 @@ async function actionGetUserDashboard(data) {
                 num_questions: q.num_questions || (q.questions || []).length,
                 time_limit:    q.time_limit,
                 mode:          q.mode,
-                quiz_url:      q.quiz_url || ('take-quiz.html?token=' + q.quiz_token)
+                quiz_url:      _fixStoredUrl(q.quiz_url, q.quiz_token)
             };
         });
     return { quizzes: quizzes };
