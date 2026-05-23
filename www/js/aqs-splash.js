@@ -92,6 +92,7 @@
             orbitHtml +
             '<div class="aqs-splash-name" data-text="' + escH(appName) + '">' + escH(appName) + '</div>' +
             '<div class="aqs-splash-tagline">' + escH(tagline) + '</div>' +
+            '<div class="aqs-splash-credit">Proudly SEMS</div>' +
             '<div class="aqs-splash-bar-wrap"><div class="aqs-splash-bar-fill"></div></div>' +
         '</div>';
 
