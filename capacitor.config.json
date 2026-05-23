@@ -1,0 +1,9 @@
+{
+  "appId": "com.darapet.smartquiz",
+  "appName": "DaraQuiz AI",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
