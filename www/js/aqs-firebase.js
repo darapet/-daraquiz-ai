@@ -71,7 +71,7 @@ const rtdb = getDatabase(app);
    On web, derive from the current page URL as before. */
 function _baseUrl() {
     if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-        return 'https://darapet.github.io/smartquiz-system/www/';
+        return 'https://darapet.github.io/smartquiz-system/';
     }
     var href = window.location.href.split('?')[0].split('#')[0];
     return href.substring(0, href.lastIndexOf('/') + 1);
