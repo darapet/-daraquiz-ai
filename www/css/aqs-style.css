@@ -928,7 +928,8 @@
     color: #fff;
 }
 
-/* Mobile hamburger */
+/* Mobile hamburger — kept for studio.html (sidebar pages) only;
+   on regular pages the nav is a scrollable row instead */
 .aqs-site-nav-toggle {
     display: none;
     flex-direction: column;
@@ -955,47 +956,60 @@
 .aqs-site-nav-toggle-open span:nth-child(2) { opacity: 0; }
 .aqs-site-nav-toggle-open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
+/* ── Mobile: scrollable horizontal nav row (no hamburger) ── */
 @media (max-width: 700px) {
-    .aqs-site-nav-toggle { display: flex; }
-    .aqs-site-header-auth { display: none; }
-    .aqs-site-nav {
-        display: none;
-        position: absolute;
-        top: 60px;
-        left: 0;
-        right: 0;
-        background: #fff;
-        border-bottom: 1px solid #e2e8f0;
-        flex-direction: column;
-        align-items: stretch;
-        padding: 8px 16px 16px;
-        gap: 4px;
-        box-shadow: 0 4px 16px rgba(0,0,0,.08);
-    }
-    .aqs-site-nav.aqs-site-nav-open { display: flex; }
-    .aqs-site-nav-link { padding: 10px 14px; border-radius: 8px; }
-    .aqs-site-header-inner { position: relative; }
+    /* Hamburger hidden — nav is always visible as a scroll row */
+    .aqs-site-nav-toggle { display: none !important; }
 
-    /* Mobile auth block — visible only when nav is open on small screens */
-    .aqs-site-nav-mobile-auth {
-        display: flex;
-        flex-direction: column;
+    /* Auth pill always visible on mobile */
+    .aqs-site-header-auth { display: flex; }
+
+    /* Header wraps to two rows: logo+auth | nav-scroll */
+    .aqs-site-header-inner {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 0 12px;
+        gap: 0;
+    }
+
+    /* Logo row */
+    .aqs-site-logo { flex: 1; padding: 10px 0; }
+
+    /* Auth stays on logo row */
+    .aqs-site-header-auth { padding: 6px 0; flex-shrink: 0; }
+
+    /* Nav scrolls horizontally on its own row */
+    .aqs-site-nav {
+        display: flex !important;           /* always visible */
+        position: static;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        width: 100%;
+        order: 3;                           /* below logo+auth row */
+        padding: 4px 0 6px;
         gap: 4px;
-        margin-top: 8px;
-        padding-top: 10px;
-        border-top: 1px solid #e2e8f0;
+        background: transparent;
+        border-top: 1px solid #f1f5f9;
+        box-shadow: none;
+        /* hide scrollbar track while keeping scroll */
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
-    .aqs-site-nav-mobile-user {
-        font-size: 0.78rem;
-        font-weight: 700;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        padding: 4px 14px;
+    .aqs-site-nav::-webkit-scrollbar { display: none; }
+
+    /* Compact link sizing for the scroll row */
+    .aqs-site-nav-link {
+        padding: 6px 12px;
+        border-radius: 8px;
+        white-space: nowrap;
+        flex-shrink: 0;
+        font-size: 0.82rem;
     }
-    .aqs-site-nav-mobile-logout {
-        color: #ef4444 !important;
-    }
+
+    /* Mobile auth block inside nav is no longer needed */
+    .aqs-site-nav-mobile-auth { display: none !important; }
 }
 
 /* Hide mobile-auth block on desktop (it lives inside the nav which is always visible) */
