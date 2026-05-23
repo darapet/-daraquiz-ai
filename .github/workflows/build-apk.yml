@@ -26,9 +26,6 @@ jobs:
           npm install
           npm install @codetrix-studio/capacitor-google-auth
 
-      - name: Build web app
-        run: npm run build
-
       - name: Sync Capacitor plugins into Android
         run: npx cap sync android
 
