@@ -33,6 +33,11 @@ jobs:
           project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
           EOF
 
+      - name: Copy web assets into Android project
+        run: |
+          mkdir -p android/app/src/main/assets/public
+          cp -r www/. android/app/src/main/assets/public/
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
