@@ -1,3 +1,27 @@
+/* ── PWA / Mobile back-button guard ────────────────────────────────────
+   On Android (PWA or Capacitor), pressing the system back button fires a
+   popstate event and exits the app entirely if the history stack is empty.
+   We push a dummy state so there is always something to pop, then re-push
+   on every popstate so the stack never empties and the app stays open.
+   ────────────────────────────────────────────────────────────────────── */
+(function _backGuard() {
+    /* Only activate for PWA / native contexts where back-button exits the app */
+    var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true
+                    || !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if (!isStandalone) return;
+
+    /* Push an initial dummy history entry */
+    history.pushState({ _aqsBack: true }, '');
+
+    window.addEventListener('popstate', function (e) {
+        if (e.state && e.state._aqsBack) {
+            /* Re-push so the stack never empties */
+            history.pushState({ _aqsBack: true }, '');
+        }
+    });
+})();
+
 /* aqs-session.js — Persistent user nav bar + 20-min inactivity auto-logout
    Works on ALL pages. Listens for aqs:authchange from aqs-firebase.js.
    Safe to include on any page — does nothing if user is not logged in. */
