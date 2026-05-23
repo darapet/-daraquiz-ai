@@ -44,8 +44,24 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Print debug SHA-1
-        run: keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android | grep SHA1
+      - name: Generate debug keystore and print SHA-1
+        run: |
+          mkdir -p ~/.android
+          keytool -genkeypair -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Android Debug,O=Android,C=US"
+          echo "=== YOUR SHA-1 FINGERPRINT ==="
+          keytool -list -v \
+            -keystore ~/.android/debug.keystore \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android | grep SHA1
 
       - name: Fix missing capacitor-cordova-android-plugins
         run: |
