@@ -140,6 +140,11 @@
     /* ── Detect native Capacitor (Android/iOS) ── */
     var _isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
+    /* ── Detect mobile web browser (not native app) ── */
+    /* On mobile web browsers crossOrigin='anonymous' can trigger CORS preflight
+       failures for image CDNs. Skip it on both native and mobile web. */
+    var _isMobileWeb = !_isNative && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
     /* ── Pollinations image URL ── */
     function pollinationsImgUrl(prompt, width, height, seed, model) {
         var encoded = encodeURIComponent(prompt);
@@ -170,8 +175,8 @@
         return new Promise(function (resolve, reject) {
             var url = pollinationsImgUrl(prompt, width, height, seed, model);
             var img = new Image();
-            /* Only set crossOrigin on the web — not on native Android/iOS */
-            if (!_isNative) img.crossOrigin = 'anonymous';
+            /* Only set crossOrigin on desktop web — not on native iOS/Android or mobile browsers */
+            if (!_isNative && !_isMobileWeb) img.crossOrigin = 'anonymous';
             var tid = setTimeout(function () { img.src = ''; reject(new Error('timeout')); }, 55000);
             img.onload  = function () { clearTimeout(tid); resolve({ url: url, img: img }); };
             img.onerror = function () { clearTimeout(tid); reject(new Error('load error')); };
