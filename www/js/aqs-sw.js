@@ -1,7 +1,7 @@
 /* XZILY AI Studio — Service Worker
    HOW TO PUSH AN UPDATE: just bump the CACHE version below (e.g. xzily-v3, xzily-v4…)
    Users will automatically see an "Update available" banner without reinstalling. */
-var CACHE = 'xzily-v2';
+var CACHE = 'xzily-v3';
 var SHELL = ['/'];
 
 self.addEventListener('install', function (e) {
