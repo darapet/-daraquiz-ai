@@ -4,48 +4,73 @@
 
     var deferredPrompt = null;
     var isIOS          = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-    var isInStandalone = ('standalone' in navigator && navigator.standalone) ||
+    var  = ('standalone' in navigator && navigator.standalone) ||
                          window.matchMedia('(display-mode: standalone)').matches;
 
     /* ══════════════════════════════════════════════════════
        CHANGELOG — EDIT THIS SECTION WHEN YOU PUSH UPDATES
        Add your latest version at the TOP of the list.
-       Format: { version: 'v2', date: 'May 2025', changes: [...] }
+       Also bump CACHE_VERSION in aqs-sw.js to match.
+       Format: { version: 'v3', date: 'June 2025', changes: [...] }
        ══════════════════════════════════════════════════════ */
     var CHANGELOG = [
         {
             version: 'v2',
             date:    'May 2025',
             changes: [
-                '🔐 Google sign-in now works correctly on all devices',
-                '🚀 App updates automatically — no reinstall needed',
-                '⚡ Faster loading with improved caching',
+                '🔐 Google sign-in now works on all devices (mobile & desktop)',
+                '🖼️ AI Image Generator upgraded — faster with Try Again on failure',
+                '❤️ Save your favourite AI images to your personal gallery',
+                '🚀 App now auto-updates — no reinstall needed',
+                '⚡ Faster page loading with smarter caching',
                 '🐛 Various bug fixes and stability improvements'
             ]
         }
-        /* Add older versions below if you like, e.g.:
+        /* Add older entries below like this:
         ,{
             version: 'v1',
             date:    'April 2025',
             changes: [
-                '🎉 Initial release'
+                '🎉 Initial release of XZILY AI'
             ]
         }
         */
     ];
 
+    /* Flag so other scripts can detect this file is loaded */
+    window._aqsPwaLoaded = true;
+
+    /* Expose globally for manual testing in the console:
+       Type  window.aqsShowWhatsNew()  to open the popup anytime */
+    window.aqsShowWhatsNew = function () { showWhatsNew(); };
+
     /* ══════════════════════════════════════════════════════
        SERVICE WORKER REGISTRATION + AUTO-UPDATE DETECTION
+       Uses a RELATIVE path so it works correctly on GitHub
+       Pages subdirectories like /smartquiz-system/
        ══════════════════════════════════════════════════════ */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
-            var cfg     = window.DTS_CONFIG || {};
-            var swUrl   = (cfg.sw_url   && cfg.sw_url.length)   ? cfg.sw_url   : '/aqs-sw.js';
-            var swScope = (cfg.sw_scope && cfg.sw_scope.length) ? cfg.sw_scope : '/';
+            var cfg = window.DTS_CONFIG || {};
+
+            /* Build a relative SW URL from the current page's directory.
+               e.g. https://darapet.github.io/smartquiz-system/index.html
+                    → registers at  /smartquiz-system/aqs-sw.js
+               This avoids the old bug where /aqs-sw.js (absolute) pointed
+               to the wrong location on GitHub Pages subdirectory sites.   */
+            var swFile = (cfg.sw_url && cfg.sw_url.length) ? cfg.sw_url : 'aqs-sw.js';
+            var swScope = (cfg.sw_scope && cfg.sw_scope.length) ? cfg.sw_scope : './';
+
+            var swUrl = swFile.indexOf('/') === -1
+                ? (window.location.pathname.replace(/\/[^/]*$/, '/') + swFile)
+                : swFile;
 
             navigator.serviceWorker.register(swUrl, { scope: swScope })
                 .then(function (reg) {
                     console.log('[XZILY PWA] SW registered:', reg.scope);
+
+                    /* Force an update check every time the page loads */
+                    reg.update();
 
                     /* If a new SW is already waiting on first load */
                     if (reg.waiting) {
@@ -63,14 +88,13 @@
                         });
                     });
                 })
-                .catch(function (err) { console.warn('[XZILY PWA] SW error:', err); });
+                .catch(function (err) { console.warn('[XZILY PWA] SW registration failed:', err); });
 
             /* When SW activates after SKIP_WAITING, reload the page */
             var refreshing = false;
             navigator.serviceWorker.addEventListener('controllerchange', function () {
                 if (!refreshing) {
                     refreshing = true;
-                    /* Mark that we just updated so What's New shows after reload */
                     try { sessionStorage.setItem('_aqsJustUpdated', '1'); } catch (ex) {}
                     window.location.reload();
                 }
@@ -80,13 +104,23 @@
 
     /* ── Show What's New after a successful update ── */
     document.addEventListener('DOMContentLoaded', function () {
+        /* Auto-show after update */
         try {
             if (sessionStorage.getItem('_aqsJustUpdated')) {
                 sessionStorage.removeItem('_aqsJustUpdated');
-                /* Small delay so the page finishes rendering first */
-                setTimeout(showWhatsNew, 800);
+                setTimeout(showWhatsNew, 900);
             }
         } catch (ex) {}
+
+        /* Wire up any "What's New" button already in your HTML.
+           Just add  id="aqs-whats-new-btn"  to any button or link. */
+        var manualBtn = document.getElementById('aqs-whats-new-btn');
+        if (manualBtn) {
+            manualBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                showWhatsNew();
+            });
+        }
     });
 
     /* ══════════════════════════════════════════════════════
@@ -119,7 +153,7 @@
     }
 
     /* ══════════════════════════════════════════════════════
-       WHAT'S NEW MODAL (shown after page reloads post-update)
+       WHAT'S NEW MODAL (shown after update OR manually)
        ══════════════════════════════════════════════════════ */
     function showWhatsNew() {
         if (document.getElementById('aqs-whatsnew-overlay')) return;
@@ -140,8 +174,8 @@
                 '<div class="aqs-wn-header">' +
                     '<div class="aqs-wn-icon">✨</div>' +
                     '<div>' +
-                        '<div class="aqs-wn-title">What\'s New in ' + latest.version + '</div>' +
-                        '<div class="aqs-wn-date">' + latest.date + '</div>' +
+                        '<div class="aqs-wn-title">What\'s New in XZILY AI ' + latest.version + '</div>' +
+                        '<div class="aqs-wn-date">Updated ' + latest.date + '</div>' +
                     '</div>' +
                 '</div>' +
                 '<ul class="aqs-wn-list">' + changesHtml + '</ul>' +
@@ -150,7 +184,6 @@
 
         document.body.appendChild(overlay);
 
-        /* Clicking overlay background or the button closes it */
         function closeWhatsNew() {
             overlay.style.animation = 'aqsFadeOut .25s ease forwards';
             setTimeout(function () { overlay.remove(); }, 250);
@@ -168,7 +201,6 @@
         var style = document.createElement('style');
         style.id = 'aqs-update-styles';
         style.textContent = [
-            /* Update banner */
             '#aqs-update-banner{',
                 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);',
                 'background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;',
@@ -178,7 +210,6 @@
                 'font-family:Inter,sans-serif;font-size:14px;max-width:92vw;',
                 'animation:aqsSlideUp .35s ease;',
             '}',
-            /* What's New overlay */
             '#aqs-whatsnew-overlay{',
                 'position:fixed;inset:0;background:rgba(0,0,0,0.65);',
                 'display:flex;align-items:center;justify-content:center;',
@@ -206,7 +237,6 @@
                 'background:rgba(255,255,255,0.06);border-radius:10px;',
                 'border-left:3px solid #6366f1;',
             '}',
-            /* Shared buttons */
             '.aqs-upd-btn-primary{',
                 'background:#fff;color:#6366f1;border:none;border-radius:10px;',
                 'padding:10px 18px;font-weight:700;cursor:pointer;font-size:14px;',
@@ -217,7 +247,6 @@
                 'background:rgba(255,255,255,0.14);color:#fff;border:none;border-radius:10px;',
                 'padding:10px 14px;cursor:pointer;font-size:13px;flex-shrink:0;',
             '}',
-            /* Keyframes */
             '@keyframes aqsSlideUp{from{opacity:0;transform:translateX(-50%) translateY(20px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}',
             '@keyframes aqsSlideDown{from{opacity:1;transform:translateX(-50%) translateY(0)}to{opacity:0;transform:translateX(-50%) translateY(20px)}}',
             '@keyframes aqsFadeIn{from{opacity:0}to{opacity:1}}',
@@ -257,7 +286,7 @@
                 '</div>' +
                 '<div class="aqs-pwa-modal-steps" id="aqs-pwa-steps-ios">' +
                     '<div class="aqs-pwa-modal-step"><div class="aqs-pwa-step-num">1</div><div class="aqs-pwa-step-text">Open this page in <strong>Safari</strong> (required on iPhone/iPad)</div></div>' +
-                    '<div class="aqs-pwa-modal-step"><div class="aqs-pwa-step-num">2</div><div class="aqs-pwa-step-text">Tap the <strong>Share</strong> button <span class="aqs-pwa-share-icon"></span> at the bottom of the screen</div></div>' +
+                    '<div class="aqs-pwa-modal-step"><div class="aqs-pwa-step-num">2</div><div class="aqs-pwa-step-text">Tap the <strong>Share</strong> button at the bottom of the screen</div></div>' +
                     '<div class="aqs-pwa-modal-step"><div class="aqs-pwa-step-num">3</div><div class="aqs-pwa-step-text">Scroll down and tap <strong>"Add to Home Screen"</strong></div></div>' +
                     '<div class="aqs-pwa-modal-step"><div class="aqs-pwa-step-num">4</div><div class="aqs-pwa-step-text">Tap <strong>Add</strong> — the app icon appears on your home screen instantly</div></div>' +
                 '</div>' +
