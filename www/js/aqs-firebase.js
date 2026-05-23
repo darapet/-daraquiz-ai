@@ -16,7 +16,9 @@ import {
     onAuthStateChanged,
     updateProfile,
     GoogleAuthProvider,
-    signInWithPopup
+    signInWithPopup,
+    setPersistence,
+    browserLocalPersistence
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
     getFirestore,
@@ -395,6 +397,7 @@ async function actionSocialLogin(data) {
         throw new Error('Unsupported social provider: ' + provider);
     }
 
+    await setPersistence(auth, browserLocalPersistence);
     var cred = await signInWithPopup(auth, authProvider);
     var user = cred.user;
 
