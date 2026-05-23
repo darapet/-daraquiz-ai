@@ -1,17 +1,16 @@
 {
-  "name": "daraquiz-ai",
-  "version": "1.0.0",
-  "description": "DaraQuiz AI — Smart Quiz System with AI Studio",
-  "scripts": {
-    "build": "echo 'Static site — no build step needed' && exit 0",
-    "sync": "npx cap sync android",
-    "open:android": "npx cap open android"
+  "appId": "com.darapet.smartquiz",
+  "appName": "XZILY AI",
+  "webDir": "www",
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "915234258423-au2kl568mirohob21ejl5n0nrt68bg5r.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
   },
-  "dependencies": {
-    "@capacitor/android": "^6.0.0",
-    "@capacitor/cli": "^6.0.0",
-    "@capacitor/core": "^6.0.0",
-    "@codetrix-studio/capacitor-google-auth": "3.3.1"
-  },
-  "devDependencies": {}
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": true
+  }
 }
