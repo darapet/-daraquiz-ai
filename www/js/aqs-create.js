@@ -280,6 +280,21 @@
 
     async function callGroqDirect(prompt) {
         if (typeof window.groqFetch !== 'function') return null;
+
+        /* Wait up to 4 s for Firestore to populate the master Groq keys.
+           On Android the app opens before the async settings fetch completes,
+           so without this wait the key array is still empty and Groq is skipped. */
+        if (!window._AQS_GROQ_MASTER_KEYS || !window._AQS_GROQ_MASTER_KEYS.length) {
+            var waited = 0;
+            while (waited < 4000) {
+                await new Promise(function(r) { setTimeout(r, 400); });
+                waited += 400;
+                if (window._AQS_GROQ_MASTER_KEYS && window._AQS_GROQ_MASTER_KEYS.length) break;
+            }
+        }
+        /* If still no keys after waiting, skip Groq */
+        if (!window._AQS_GROQ_MASTER_KEYS || !window._AQS_GROQ_MASTER_KEYS.length) return null;
+
         var isMath = isMathPrompt(prompt);
         var groqModel  = isMath ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
         var groqTokens = isMath ? 6144 : 4096;
