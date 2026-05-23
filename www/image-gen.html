@@ -34,7 +34,9 @@
     <nav class="aqs-sidebar-nav">
         <a href="studio.html" class="aqs-sidebar-link"><span class="aqs-sidebar-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg></span>Studio Home</a>
         <a href="image-gen.html" class="aqs-sidebar-link active"><span class="aqs-sidebar-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>Image Creator</a>
+        <a href="image-editor.html" class="aqs-sidebar-link"><span class="aqs-sidebar-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span>Image Editor</a>
         <a href="docs-gen.html" class="aqs-sidebar-link"><span class="aqs-sidebar-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>Docs Generator</a>
+        <a href="tts.html" class="aqs-sidebar-link"><span class="aqs-sidebar-link-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></span>Text to Speech</a>
     </nav>
     <div class="aqs-sidebar-nav-label" style="margin-top:14px;">QUIZ</div>
     <nav class="aqs-sidebar-nav">
@@ -49,6 +51,22 @@
 <main class="aqs-page-main">
 
 <div class="aqs-wrap aqs-imagegen-wrap" id="aqs-imagegen-wrap">
+      <!-- Mobile disclaimer -->
+      <div id="aqs-mobile-notice" style="display:none;margin:16px 16px 0;padding:14px 18px;background:linear-gradient(135deg,#fef3c7,#fff7ed);border:2px solid #f59e0b;border-radius:14px;flex-direction:column;gap:8px;box-shadow:0 2px 12px rgba(245,158,11,0.15);">
+          <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.5rem;flex-shrink:0;">⚠️</span>
+              <div style="font-size:0.92rem;font-weight:700;color:#92400e;">AI Image Creator — Best on Web Browser</div>
+          </div>
+          <div style="font-size:0.84rem;color:#78350f;line-height:1.65;padding-left:2px;">
+              Image generation may not work correctly on the mobile app. For the best experience, open our website in your browser:<br>
+              <a href="https://darapet.github.io/smartquiz-system/image-gen.html" style="color:#b45309;font-weight:700;word-break:break-all;text-decoration:underline;">https://darapet.github.io/smartquiz-system/</a>
+          </div>
+          <button onclick="document.getElementById('aqs-mobile-notice').style.display='none'" style="align-self:flex-end;background:none;border:1px solid #f59e0b;border-radius:6px;color:#92400e;font-size:0.78rem;font-weight:600;padding:4px 12px;cursor:pointer;">Dismiss</button>
+      </div>
+      <script>
+      (function(){var ua=navigator.userAgent||'';var isMobile=/Android|iPhone|iPad|iPod/i.test(ua);if(isMobile){var n=document.getElementById('aqs-mobile-notice');if(n)n.style.display='flex';}})();
+      </script>
+  
     <div class="aqs-imagegen-hero">
         <div class="aqs-imagegen-hero-inner">
             <div class="aqs-imagegen-hero-icon">
