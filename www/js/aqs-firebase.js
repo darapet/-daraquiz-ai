@@ -67,11 +67,11 @@ const db   = getFirestore(app);
 const rtdb = getDatabase(app);
 
 /* ── Base URL helper ──
-   On native Android/iOS (Capacitor) window.location is localhost — use Firebase Hosting instead.
+   On native Android/iOS (Capacitor) window.location is localhost — use GitHub Pages instead.
    On web, derive from the current page URL as before. */
 function _baseUrl() {
     if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-        return 'https://darapet.github.io/smartquiz-system/';
+        return 'https://darapet.github.io/-daraquiz-ai/';
     }
     var href = window.location.href.split('?')[0].split('#')[0];
     return href.substring(0, href.lastIndexOf('/') + 1);
@@ -409,19 +409,15 @@ async function actionSocialLogin(data) {
         throw new Error('Unsupported social provider: ' + provider);
     }
 
-    var cred;
-    if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-        /* Native Android/iOS — use native Google Sign-In plugin */
-        var GoogleAuth = window.Capacitor.Plugins.GoogleAuth;
-        var googleUser = await GoogleAuth.signIn();
-        var idToken = googleUser.authentication.idToken;
-        var firebaseCredential = GoogleAuthProvider.credential(idToken);
-        cred = await signInWithCredential(auth, firebaseCredential);
-    } else {
-        /* Web browser — use popup */
-        await setPersistence(auth, browserLocalPersistence);
-        cred = await signInWithPopup(auth, authProvider);
+    /* signInWithPopup is blocked by the Android WebView — it opens nothing and
+       silently hangs.  Detect native Capacitor and give a friendly error instead
+       so the app does not freeze.  Users should use email/password on mobile. */
+    var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if (isNative) {
+        throw new Error('Google sign-in is not supported in the Android app. Please sign in with your email and password instead.');
     }
+
+    var cred = await signInWithPopup(auth, authProvider);
     var user = cred.user;
 
     /* Check if user doc already exists */
@@ -576,7 +572,7 @@ async function actionGetQuizzes(data) {
             status:        q.status,
             host_status:   q.host_status || 'active',
             quiz_token:    q.quiz_token || '',
-            quiz_url:      _fixStoredUrl(q.quiz_url, q.quiz_token),
+            quiz_url:      q.quiz_url || '',
             created_at_ms: q.created_at && q.created_at.toDate ? q.created_at.toDate().getTime() : 0
         };
     });
@@ -703,7 +699,7 @@ async function actionDeleteQuiz(data) {
         status:         qData.status || 'draft',
         mode:           qData.mode || 'exam',
         quiz_token:     qData.quiz_token || '',
-        quiz_url:       _fixStoredUrl(qData.quiz_url, qData.quiz_token),
+        quiz_url:       qData.quiz_url || '',
         created_at_str: tsToStr(qData.created_at),
         custom_form:    qData.custom_form || [],
         total_attempts: attArchive.length,
@@ -1062,7 +1058,7 @@ async function actionGetUserDashboard(data) {
                 num_questions: q.num_questions || (q.questions || []).length,
                 time_limit:    q.time_limit,
                 mode:          q.mode,
-                quiz_url:      _fixStoredUrl(q.quiz_url, q.quiz_token)
+                quiz_url:      q.quiz_url || ('take-quiz.html?token=' + q.quiz_token)
             };
         });
     return { quizzes: quizzes };
@@ -1116,9 +1112,6 @@ async function actionChCreate(data) {
 
     /* In league mode, number of rounds = numPlayers - 1 (one per elimination) */
     if (leagueMode) numRounds = Math.max(1, numPlayers - 1);
-    /* Each player must have their own unique question slice so no two players
-       see the same question. Total pool = numPlayers × qpr (one full set per player).
-       Standard mode also needs numPlayers × qpr per round × numRounds. */
     var numQ = numPlayers * qpr * numRounds;
     var challengeData = {
         code:                code,
@@ -1247,25 +1240,18 @@ async function actionChStart(data) {
     var qLen = questions.length || 1;
 
     if (leagueMode) {
-        /* League mode: each player gets their OWN unique slice of the question pool
-           so no two players are shown the same question.
-           Player p gets questions offset by p*qpr within each league round.
-           This means when primary_pos rotates to player p, everyone sees that
-           player's unique question set — fair head-to-head competition. */
         var leagueRounds = Math.max(1, numPlayers - 1);
         var leaguePerPlayer = qpr * leagueRounds;
         for (var p = 0; p < numPlayers; p++) {
             var playerQs = [];
             for (var lr = 0; lr < leagueRounds; lr++) {
                 for (var qi = 0; qi < qpr; qi++) {
-                    /* Offset: league round × pool-width + player-slot × qpr + question index */
                     var poolOffset = (lr * numPlayers * qpr) + (p * qpr) + qi;
                     playerQs.push(questions[poolOffset % qLen]);
                 }
             }
             assignments['player_questions/' + p] = playerQs;
         }
-        /* All positions start as active */
         var initActive = [];
         for (var ap = 0; ap < numPlayers; ap++) initActive.push(ap);
 
@@ -1279,14 +1265,13 @@ async function actionChStart(data) {
             started_at:            Date.now(),
             question_started_at:   Date.now(),
             server_time:           Date.now() / 1000,
-            total_rounds:          1,   /* grows by 1 after each league elimination */
+            total_rounds:          1,
             active_pos:            0,
             primary_pos:           0,
             league_round:          1,
             league_active_players: initActive
         }));
     } else {
-        /* Standard mode: interleaved per-player questions */
         for (var p = 0; p < numPlayers; p++) {
             var playerQs = [];
             for (var qi = 0; qi < perPlayer; qi++) {
@@ -1329,7 +1314,6 @@ async function actionChPoll(data) {
         var elapsed    = (Date.now() - (ch.question_started_at || Date.now())) / 1000;
         var timeLimit  = (ch.time_per_question || 30);
         if (elapsed >= timeLimit + 2) {
-            /* Active player timed out — record no-answer (answerIdx=-1) and advance */
             var activePos  = ch.active_pos !== undefined ? parseInt(ch.active_pos) : 0;
             var numPlayers = ch.num_players || 2;
             var answersThisQ  = Object.assign({}, ch.answers_this_q || {});
@@ -1344,7 +1328,6 @@ async function actionChPoll(data) {
             var timedAttempt = (ch.attempt_idx || 0) + 1;
             var players2     = ch.players ? Object.values(ch.players) : [];
 
-            /* Player timed out → reveal and advance to next turn (no steal) */
             await update(ref(rtdb, 'challenges/' + code), {
                 answers_this_q:  answersThisQ,
                 steal_mode:      false,
@@ -1403,7 +1386,6 @@ async function actionChPoll(data) {
         chat:                   ch.chat ? (Array.isArray(ch.chat) ? ch.chat : Object.values(ch.chat)) : [],
         server_time:            Date.now() / 1000,
         question_started_at:    (ch.question_started_at || Date.now()) / 1000,
-        /* League mode fields */
         league_mode:            ch.league_mode || false,
         league_round:           ch.league_round || 1,
         league_active_players:  leagueActive,
@@ -1436,7 +1418,6 @@ async function _advanceQuestion(code, ch) {
 
     if (round > totalR) {
         if (leagueMode && activePlayers && activePlayers.length > 1) {
-            /* League round finished — eliminate the lowest scorer */
             await _leagueEliminate(code, ch);
             return;
         }
@@ -1480,20 +1461,16 @@ async function _leagueEliminate(code, ch) {
     var tiedLowest = activePlayers.filter(function(pos) {
         return (scores[pos] !== undefined ? scores[pos] : 0) === lowestScore;
     });
-    /* If tied at the bottom, eliminate the one with the highest position index
-       (arbitrary but deterministic) */
     var eliminatedPos = tiedLowest[tiedLowest.length - 1];
 
     var newActivePlayers = activePlayers.filter(function(pos) { return pos !== eliminatedPos; });
     var newLeagueRound   = (ch.league_round || 1) + 1;
     var newTotalRounds   = (ch.total_rounds || 1) + 1;
 
-    /* Fetch eliminated player's display info */
     var elim = players.find(function(p) { return parseInt(p.position) === eliminatedPos; });
     var elimName = elim ? elim.player_name : ('Player ' + (eliminatedPos + 1));
     var elimChar = elim ? (elim.character_id || 'koda') : 'koda';
 
-    /* Set elimination phase — clients will show an animated overlay */
     await update(ref(rtdb, 'challenges/' + code), {
         phase:                    'league_elimination',
         league_eliminated_pos:    eliminatedPos,
@@ -1505,7 +1482,6 @@ async function _leagueEliminate(code, ch) {
     });
 
     if (newActivePlayers.length <= 1) {
-        /* Only one player left — announce game over after overlay displays */
         setTimeout(async function() {
             await update(ref(rtdb, 'challenges/' + code), {
                 status: 'finished',
@@ -1514,7 +1490,6 @@ async function _leagueEliminate(code, ch) {
             });
         }, 7000);
     } else {
-        /* Start next league round after clients have had time to view the overlay */
         setTimeout(async function() {
             var s2 = await get(ref(rtdb, 'challenges/' + code));
             if (!s2.exists()) return;
@@ -1570,7 +1545,6 @@ async function actionChAnswer(data) {
     var elapsed   = (Date.now() - (ch.question_started_at || Date.now())) / 1000;
     var timeBonus = Math.max(0, Math.round((1 - elapsed / (ch.time_per_question || 30)) * 100));
 
-    /* In steal mode the question belongs to the player who originally missed */
     var questionOwner = isStealMode ? stealOfPos : pos;
     var rawPQ         = (ch.player_questions || {})[questionOwner] || (ch.player_questions || {})[String(questionOwner)] || {};
     var pQuestions    = Array.isArray(rawPQ) ? rawPQ : Object.values(rawPQ);
@@ -1586,7 +1560,6 @@ async function actionChAnswer(data) {
         isCorrect  = (answerIdx >= 0 && answerIdx === correctIdx);
     }
 
-    /* Skill modifiers from client */
     var skillBoost  = (data.skill_boost  && parseInt(data.skill_boost)  > 1) ? parseInt(data.skill_boost)  : 1;
     var skillShield = !!(data.skill_shield && parseInt(data.skill_shield) === 1);
     var skillD2     = !!(data.skill_d2steal && parseInt(data.skill_d2steal) === 1);
@@ -1607,12 +1580,9 @@ async function actionChAnswer(data) {
 
     /* ── CASE 1: Wrong answer ── */
     if (!isCorrect) {
-        /* Offer steal to the next player who hasn't given their primary answer yet.
-           Steals only chain once — if we're already IN steal mode, just advance. */
         var canSteal    = false;
         var nextStealer = -1;
         if (!isStealMode) {
-            /* Resolve active (non-eliminated) players for steal candidate search */
             var stealActivePlayers;
             if (ch.league_mode && ch.league_active_players) {
                 stealActivePlayers = Array.isArray(ch.league_active_players)
@@ -1623,13 +1593,12 @@ async function actionChAnswer(data) {
                 for (var si2 = 0; si2 < numPlayers; si2++) stealActivePlayers.push(si2);
             }
             var atq = Object.assign({}, ch.answers_this_q || {});
-            atq[String(pos)] = { is_steal: false }; /* treat current player as primary-done */
+            atq[String(pos)] = { is_steal: false };
             var posIdx = stealActivePlayers.indexOf(pos);
             if (posIdx < 0) posIdx = 0;
             for (var si = 1; si <= stealActivePlayers.length; si++) {
                 var checkPos = stealActivePlayers[(posIdx + si) % stealActivePlayers.length];
                 var entry    = atq[checkPos] !== undefined ? atq[checkPos] : atq[String(checkPos)];
-                /* Can steal if they haven't done a primary answer yet */
                 if (!entry || entry.is_steal) { nextStealer = checkPos; canSteal = true; break; }
             }
         }
@@ -1643,8 +1612,6 @@ async function actionChAnswer(data) {
         };
 
         if (canSteal) {
-            /* Keep primary_pos unchanged so all players still see the same question.
-               Only active_pos changes to the stealer. */
             updates['steal_mode']   = true;
             updates['steal_of_pos'] = pos;
             await update(ref(rtdb, 'challenges/' + code), updates);
@@ -1661,7 +1628,6 @@ async function actionChAnswer(data) {
                 });
             }, 2000);
         } else {
-            /* No steal available (already in steal mode, or no players left) — advance normally */
             updates['steal_mode']   = false;
             updates['steal_of_pos'] = null;
             await update(ref(rtdb, 'challenges/' + code), updates);
@@ -1714,14 +1680,12 @@ async function _advanceNextOrQuestion(code, ch) {
         if (!answersThisQ[k].is_steal) primaryDone.add(parseInt(k));
     });
 
-    /* Count only active players who have completed their primary turn */
     var activePrimaryDone = activePlayers.filter(function(p) { return primaryDone.has(p); }).length;
     if (activePrimaryDone >= numActive) {
         await _advanceQuestion(code, ch);
         return;
     }
 
-    /* Find next active player after current active_pos who still needs primary */
     var start    = ch.active_pos !== undefined ? parseInt(ch.active_pos) : activePlayers[0];
     var startIdx = activePlayers.indexOf(start);
     if (startIdx < 0) startIdx = 0;
@@ -1744,7 +1708,6 @@ async function _advanceNextOrQuestion(code, ch) {
         server_time:         Date.now() / 1000
     });
 }
-
 
 async function actionChPlayAgain(data) {
     var code        = (data.code || '').toUpperCase();
@@ -1843,12 +1806,10 @@ async function actionSaveSettings(data) {
         'yahoo_client_id','yahoo_client_secret'
     ];
     allowed.forEach(function(k) { if (k in data) payload[k] = data[k]; });
-    /* If groq_keys array is provided, keep it clean */
     if (Array.isArray(payload.groq_keys)) {
         payload.groq_keys = payload.groq_keys.filter(function(k) { return k && k.startsWith('gsk_'); });
     }
     await setDoc(doc(db, 'settings', 'main'), payload, { merge: true });
-    /* Immediately expose the updated keys to aqs-groq-key.js */
     if (Array.isArray(payload.groq_keys)) {
         window._AQS_GROQ_MASTER_KEYS = payload.groq_keys;
     }
@@ -1932,13 +1893,10 @@ function _updateAqsGlobals(user, profile) {
     }
     if (authPages.indexOf(page) !== -1) {
         onAuthStateChanged(auth, async function(user) {
-            /* Do NOT redirect while a registration is in progress — the register
-               success callback will do its own role-aware redirect. */
             if (window._aqsIsRegistering) return;
             if (user) {
                 var redirectUrl = new URLSearchParams(window.location.search).get('redirect') || '';
                 if (redirectUrl) { window.location.href = redirectUrl; return; }
-                /* Look up the user's role so hosts go to the correct dashboard */
                 try {
                     var profileSnap = await getDoc(doc(db, 'users', user.uid));
                     var role = profileSnap.exists() ? (profileSnap.data().role || 'student') : 'student';
@@ -1955,6 +1913,20 @@ function _updateAqsGlobals(user, profile) {
         var googleBtn = document.getElementById('aqs-google-login');
         if (!googleBtn) return;
 
+        /* On native Android/iOS hide the Google button entirely —
+           signInWithPopup is blocked by the WebView, so showing it
+           would only confuse users.  Email/password login works fine. */
+        var _isNativeBtn = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+        if (_isNativeBtn) {
+            googleBtn.style.display = 'none';
+            /* Also hide any "— or —" divider that sits above/below the Google button */
+            var divider = googleBtn.closest('.aqs-social-divider') ||
+                          googleBtn.previousElementSibling ||
+                          document.querySelector('.aqs-or-divider, .aqs-social-sep');
+            if (divider && /or/i.test(divider.textContent)) divider.style.display = 'none';
+            return;
+        }
+
         googleBtn.addEventListener('click', async function() {
             googleBtn.disabled = true;
             googleBtn.textContent = 'Connecting…';
@@ -1966,7 +1938,6 @@ function _updateAqsGlobals(user, profile) {
             } catch(e) {
                 googleBtn.disabled = false;
                 googleBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continue with Google';
-                /* Show error in alert box if present */
                 var alertBox = document.getElementById('aqs-login-alert') || document.getElementById('aqs-register-alert');
                 if (alertBox) {
                     alertBox.textContent = e.message || 'Google sign-in failed. Please try again.';
@@ -1985,13 +1956,11 @@ function _updateAqsGlobals(user, profile) {
 /* ============================================================
    AUTO-INIT: load Groq master keys from Firestore into global
    so aqs-groq-key.js can use them without any hardcoded secrets.
-   Settings/main is publicly readable per the Firestore rules.
    ============================================================ */
 (function _loadGroqKeys() {
     getDoc(doc(db, 'settings', 'main')).then(function(snap) {
         if (!snap.exists()) return;
         var s = snap.data();
-        /* Support both the new groq_keys array AND the legacy single key field */
         var keys = [];
         if (Array.isArray(s.groq_keys) && s.groq_keys.length) {
             keys = s.groq_keys.filter(function(k) { return k && k.startsWith('gsk_'); });
@@ -2000,8 +1969,6 @@ function _updateAqsGlobals(user, profile) {
         }
         if (keys.length) window._AQS_GROQ_MASTER_KEYS = keys;
     }).catch(function() { /* silently ignore — no keys available */ });
-    /* Note: _aqsFirebaseReady and aqs:firebase:ready are already set/dispatched
-       by the patchJQuery IIFE above — no need to duplicate them here. */
 })();
 
 export { auth, db, rtdb, requireAuth, generateToken };
