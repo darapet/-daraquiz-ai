@@ -2046,5 +2046,99 @@ function _updateAqsGlobals(user, profile) {
     /* Note: _aqsFirebaseReady and aqs:firebase:ready are already set/dispatched
        by the patchJQuery IIFE above — no need to duplicate them here. */
 })();
+/* ════════════════════════════════════════════════════════════════
+   GALLERY PATCH for aqs-firebase.js
+   ────────────────────────────────────────────────────────────────
+   HOW TO ADD THIS:
+
+   STEP 1 — In the handleAction() switch/case block, add these 3 lines
+   inside the "AUTH" section (anywhere before the default: case):
+
+        case 'aqs_save_gallery_image':   return await actionSaveGalleryImage(data);
+        case 'aqs_get_gallery_images':   return await actionGetGalleryImages();
+        case 'aqs_delete_gallery_image': return await actionDeleteGalleryImage(data);
+
+   STEP 2 — Paste the three functions below anywhere at the bottom of
+   aqs-firebase.js, before the closing line of the file.
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Save an image URL to the signed-in user's gallery ── */
+async function actionSaveGalleryImage(data) {
+    var user = auth.currentUser || window._aqsFirebaseUser;
+    if (!user) throw new Error('Not signed in.');
+
+    var url       = (data.url || '').trim();
+    var rawPrompt = (data.rawPrompt || '').trim();
+    if (!url) throw new Error('No image URL provided.');
+
+    /* Prevent saving more than 100 images per user */
+    var existing = await getDocs(
+        query(collection(db, 'gallery'), where('uid', '==', user.uid), limit(1))
+    );
+    var countSnap = await getDocs(
+        query(collection(db, 'gallery'), where('uid', '==', user.uid))
+    );
+    if (countSnap.size >= 100) throw new Error('Gallery full (100 image limit). Please delete some images first.');
+
+    var docRef = await addDoc(collection(db, 'gallery'), {
+        uid:       user.uid,
+        url:       url,
+        rawPrompt: rawPrompt,
+        savedAt:   serverTimestamp()
+    });
+
+    return { id: docRef.id, saved: true };
+}
+
+/* ── Load all gallery images for the signed-in user ── */
+async function actionGetGalleryImages() {
+    var user = auth.currentUser || window._aqsFirebaseUser;
+    if (!user) throw new Error('Not signed in.');
+
+    var snap = await getDocs(
+        query(
+            collection(db, 'gallery'),
+            where('uid', '==', user.uid),
+            orderBy('savedAt', 'desc'),
+            limit(100)
+        )
+    );
+
+    var images = snap.docs.map(function (d) {
+        return Object.assign({ id: d.id }, d.data());
+    });
+
+    return { images: images };
+}
+
+/* ── Delete a saved gallery image ── */
+async function actionDeleteGalleryImage(data) {
+    var user = auth.currentUser || window._aqsFirebaseUser;
+    if (!user) throw new Error('Not signed in.');
+
+    var id = (data.id || '').trim();
+    if (!id) throw new Error('No image ID provided.');
+
+    /* Verify the image belongs to this user before deleting */
+    var docRef  = doc(db, 'gallery', id);
+    var docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) throw new Error('Image not found.');
+    if (docSnap.data().uid !== user.uid) throw new Error('Not authorised to delete this image.');
+
+    await deleteDoc(docRef);
+    return { deleted: true };
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   STEP 3 — Add this Firestore security rule to your firestore.rules
+   (inside the "match /databases/{database}/documents" block):
+
+   match /gallery/{imageId} {
+     allow read, write: if request.auth != null && request.auth.uid == resource.data.uid;
+     allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
+   }
+   ════════════════════════════════════════════════════════════════ */
+
 
 export { auth, db, rtdb, requireAuth, generateToken };
