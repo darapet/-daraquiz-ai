@@ -16,77 +16,80 @@
     var browserModeSpeed = 1;
 
     /* ── Voice list ── */
+    /* Each voice has a unique seed so that even voices sharing the same
+       Pollinations engine voice (alloy/echo/fable/onyx/nova/shimmer) produce
+       meaningfully different prosody, pacing, and intonation. */
     var VOICES = [
         /* English */
-        { id:'Brian',    name:'Brian',    lang:'en', region:'UK',       gender:'male'   },
-        { id:'Amy',      name:'Amy',      lang:'en', region:'UK',       gender:'female' },
-        { id:'Emma',     name:'Emma',     lang:'en', region:'UK',       gender:'female' },
-        { id:'Geraint',  name:'Geraint',  lang:'en', region:'Welsh',    gender:'male'   },
-        { id:'Ivy',      name:'Ivy',      lang:'en', region:'US',       gender:'female' },
-        { id:'Joanna',   name:'Joanna',   lang:'en', region:'US',       gender:'female' },
-        { id:'Joey',     name:'Joey',     lang:'en', region:'US',       gender:'male'   },
-        { id:'Justin',   name:'Justin',   lang:'en', region:'US',       gender:'male'   },
-        { id:'Kendra',   name:'Kendra',   lang:'en', region:'US',       gender:'female' },
-        { id:'Kimberly', name:'Kimberly', lang:'en', region:'US',       gender:'female' },
-        { id:'Matthew',  name:'Matthew',  lang:'en', region:'US',       gender:'male'   },
-        { id:'Salli',    name:'Salli',    lang:'en', region:'US',       gender:'female' },
-        { id:'Nicole',   name:'Nicole',   lang:'en', region:'AU',       gender:'female' },
-        { id:'Russell',  name:'Russell',  lang:'en', region:'AU',       gender:'male'   },
-        { id:'Aditi',    name:'Aditi',    lang:'hi', region:'IN/EN',    gender:'female' },
-        { id:'Raveena',  name:'Raveena',  lang:'hi', region:'IN',       gender:'female' },
+        { id:'Brian',    name:'Brian',    lang:'en', region:'UK',       gender:'male',   seed:1001 },
+        { id:'Amy',      name:'Amy',      lang:'en', region:'UK',       gender:'female', seed:1002 },
+        { id:'Emma',     name:'Emma',     lang:'en', region:'UK',       gender:'female', seed:1003 },
+        { id:'Geraint',  name:'Geraint',  lang:'en', region:'Welsh',    gender:'male',   seed:1004 },
+        { id:'Ivy',      name:'Ivy',      lang:'en', region:'US',       gender:'female', seed:1005 },
+        { id:'Joanna',   name:'Joanna',   lang:'en', region:'US',       gender:'female', seed:1006 },
+        { id:'Joey',     name:'Joey',     lang:'en', region:'US',       gender:'male',   seed:1007 },
+        { id:'Justin',   name:'Justin',   lang:'en', region:'US',       gender:'male',   seed:1008 },
+        { id:'Kendra',   name:'Kendra',   lang:'en', region:'US',       gender:'female', seed:1009 },
+        { id:'Kimberly', name:'Kimberly', lang:'en', region:'US',       gender:'female', seed:1010 },
+        { id:'Matthew',  name:'Matthew',  lang:'en', region:'US',       gender:'male',   seed:1011 },
+        { id:'Salli',    name:'Salli',    lang:'en', region:'US',       gender:'female', seed:1012 },
+        { id:'Nicole',   name:'Nicole',   lang:'en', region:'AU',       gender:'female', seed:1013 },
+        { id:'Russell',  name:'Russell',  lang:'en', region:'AU',       gender:'male',   seed:1014 },
+        { id:'Aditi',    name:'Aditi',    lang:'hi', region:'IN/EN',    gender:'female', seed:2001 },
+        { id:'Raveena',  name:'Raveena',  lang:'hi', region:'IN',       gender:'female', seed:2002 },
         /* French */
-        { id:'Celine',   name:'Céline',   lang:'fr', region:'FR',       gender:'female' },
-        { id:'Mathieu',  name:'Mathieu',  lang:'fr', region:'FR',       gender:'male'   },
-        { id:'Chantal',  name:'Chantal',  lang:'fr', region:'CA',       gender:'female' },
+        { id:'Celine',   name:'Céline',   lang:'fr', region:'FR',       gender:'female', seed:3001 },
+        { id:'Mathieu',  name:'Mathieu',  lang:'fr', region:'FR',       gender:'male',   seed:3002 },
+        { id:'Chantal',  name:'Chantal',  lang:'fr', region:'CA',       gender:'female', seed:3003 },
         /* German */
-        { id:'Hans',     name:'Hans',     lang:'de', region:'DE',       gender:'male'   },
-        { id:'Marlene',  name:'Marlene',  lang:'de', region:'DE',       gender:'female' },
-        { id:'Vicki',    name:'Vicki',    lang:'de', region:'DE',       gender:'female' },
+        { id:'Hans',     name:'Hans',     lang:'de', region:'DE',       gender:'male',   seed:4001 },
+        { id:'Marlene',  name:'Marlene',  lang:'de', region:'DE',       gender:'female', seed:4002 },
+        { id:'Vicki',    name:'Vicki',    lang:'de', region:'DE',       gender:'female', seed:4003 },
         /* Spanish */
-        { id:'Conchita', name:'Conchita', lang:'es', region:'ES',       gender:'female' },
-        { id:'Enrique',  name:'Enrique',  lang:'es', region:'ES',       gender:'male'   },
-        { id:'Lucia',    name:'Lucia',    lang:'es', region:'ES',       gender:'female' },
-        { id:'Miguel',   name:'Miguel',   lang:'es', region:'US',       gender:'male'   },
-        { id:'Penelope', name:'Penélope', lang:'es', region:'US',       gender:'female' },
+        { id:'Conchita', name:'Conchita', lang:'es', region:'ES',       gender:'female', seed:5001 },
+        { id:'Enrique',  name:'Enrique',  lang:'es', region:'ES',       gender:'male',   seed:5002 },
+        { id:'Lucia',    name:'Lucia',    lang:'es', region:'ES',       gender:'female', seed:5003 },
+        { id:'Miguel',   name:'Miguel',   lang:'es', region:'US',       gender:'male',   seed:5004 },
+        { id:'Penelope', name:'Penélope', lang:'es', region:'US',       gender:'female', seed:5005 },
         /* Italian */
-        { id:'Carla',    name:'Carla',    lang:'it', region:'IT',       gender:'female' },
-        { id:'Giorgio',  name:'Giorgio',  lang:'it', region:'IT',       gender:'male'   },
+        { id:'Carla',    name:'Carla',    lang:'it', region:'IT',       gender:'female', seed:6001 },
+        { id:'Giorgio',  name:'Giorgio',  lang:'it', region:'IT',       gender:'male',   seed:6002 },
         /* Portuguese */
-        { id:'Cristiano',name:'Cristiano',lang:'pt', region:'PT',       gender:'male'   },
-        { id:'Ines',     name:'Inês',     lang:'pt', region:'PT',       gender:'female' },
-        { id:'Vitoria',  name:'Vitória',  lang:'pt', region:'BR',       gender:'female' },
+        { id:'Cristiano',name:'Cristiano',lang:'pt', region:'PT',       gender:'male',   seed:7001 },
+        { id:'Ines',     name:'Inês',     lang:'pt', region:'PT',       gender:'female', seed:7002 },
+        { id:'Vitoria',  name:'Vitória',  lang:'pt', region:'BR',       gender:'female', seed:7003 },
         /* Japanese */
-        { id:'Mizuki',   name:'Mizuki',   lang:'ja', region:'JP',       gender:'female' },
-        { id:'Takumi',   name:'Takumi',   lang:'ja', region:'JP',       gender:'male'   },
+        { id:'Mizuki',   name:'Mizuki',   lang:'ja', region:'JP',       gender:'female', seed:8001 },
+        { id:'Takumi',   name:'Takumi',   lang:'ja', region:'JP',       gender:'male',   seed:8002 },
         /* Korean */
-        { id:'Seoyeon',  name:'Seoyeon',  lang:'ko', region:'KR',       gender:'female' },
+        { id:'Seoyeon',  name:'Seoyeon',  lang:'ko', region:'KR',       gender:'female', seed:9001 },
         /* Chinese */
-        { id:'Zhiyu',    name:'Zhiyu',    lang:'zh', region:'CN',       gender:'female' },
+        { id:'Zhiyu',    name:'Zhiyu',    lang:'zh', region:'CN',       gender:'female', seed:9101 },
         /* Dutch */
-        { id:'Lotte',    name:'Lotte',    lang:'nl', region:'NL',       gender:'female' },
-        { id:'Ruben',    name:'Ruben',    lang:'nl', region:'NL',       gender:'male'   },
+        { id:'Lotte',    name:'Lotte',    lang:'nl', region:'NL',       gender:'female', seed:9201 },
+        { id:'Ruben',    name:'Ruben',    lang:'nl', region:'NL',       gender:'male',   seed:9202 },
         /* Polish */
-        { id:'Ewa',      name:'Ewa',      lang:'pl', region:'PL',       gender:'female' },
-        { id:'Jacek',    name:'Jacek',    lang:'pl', region:'PL',       gender:'male'   },
-        { id:'Maja',     name:'Maja',     lang:'pl', region:'PL',       gender:'female' },
+        { id:'Ewa',      name:'Ewa',      lang:'pl', region:'PL',       gender:'female', seed:9301 },
+        { id:'Jacek',    name:'Jacek',    lang:'pl', region:'PL',       gender:'male',   seed:9302 },
+        { id:'Maja',     name:'Maja',     lang:'pl', region:'PL',       gender:'female', seed:9303 },
         /* Russian */
-        { id:'Maxim',    name:'Maxim',    lang:'ru', region:'RU',       gender:'male'   },
-        { id:'Tatyana',  name:'Tatyana',  lang:'ru', region:'RU',       gender:'female' },
+        { id:'Maxim',    name:'Maxim',    lang:'ru', region:'RU',       gender:'male',   seed:9401 },
+        { id:'Tatyana',  name:'Tatyana',  lang:'ru', region:'RU',       gender:'female', seed:9402 },
         /* Turkish */
-        { id:'Filiz',    name:'Filiz',    lang:'tr', region:'TR',       gender:'female' },
+        { id:'Filiz',    name:'Filiz',    lang:'tr', region:'TR',       gender:'female', seed:9501 },
         /* Swedish */
-        { id:'Astrid',   name:'Astrid',   lang:'sv', region:'SE',       gender:'female' },
+        { id:'Astrid',   name:'Astrid',   lang:'sv', region:'SE',       gender:'female', seed:9601 },
         /* Danish */
-        { id:'Naja',     name:'Naja',     lang:'da', region:'DK',       gender:'female' },
-        { id:'Mads',     name:'Mads',     lang:'da', region:'DK',       gender:'male'   },
+        { id:'Naja',     name:'Naja',     lang:'da', region:'DK',       gender:'female', seed:9701 },
+        { id:'Mads',     name:'Mads',     lang:'da', region:'DK',       gender:'male',   seed:9702 },
         /* Norwegian */
-        { id:'Liv',      name:'Liv',      lang:'nb', region:'NO',       gender:'female' },
+        { id:'Liv',      name:'Liv',      lang:'nb', region:'NO',       gender:'female', seed:9801 },
         /* Romanian */
-        { id:'Carmen',   name:'Carmen',   lang:'ro', region:'RO',       gender:'female' },
+        { id:'Carmen',   name:'Carmen',   lang:'ro', region:'RO',       gender:'female', seed:9901 },
         /* Welsh */
-        { id:'Gwyneth',  name:'Gwyneth',  lang:'cy', region:'UK',       gender:'female' },
+        { id:'Gwyneth',  name:'Gwyneth',  lang:'cy', region:'UK',       gender:'female', seed:9902 },
         /* Arabic */
-        { id:'Zeina',    name:'Zeina',    lang:'ar', region:'AR',       gender:'female' },
+        { id:'Zeina',    name:'Zeina',    lang:'ar', region:'AR',       gender:'female', seed:9903 },
     ];
 
     /* ── Render voice grid ── */
@@ -185,19 +188,30 @@
         Zeina:'nova'
     };
 
-    async function fetchChunk(text, voice, langCode) {
+    async function fetchChunk(text, voice) {
+        /* Resolve the Pollinations engine voice for this named voice */
         var pollinationsVoice = POLLY_TO_POLLINATIONS[voice] || 'alloy';
 
-        /* Pollinations TTS — free, no key, works from any browser */
+        /* Each named voice carries a unique seed so that voices sharing the same
+           engine voice (e.g. two voices both mapped to "shimmer") still produce
+           meaningfully different speech — Pollinations uses the seed for prosody
+           variation, pacing, and intonation. */
+        var voiceObj  = VOICES.find(function(v) { return v.id === voice; });
+        var voiceSeed = voiceObj ? voiceObj.seed : Math.floor(Math.random() * 9000 + 1000);
+
+        /* Build the Pollinations TTS URL.
+           NOTE: Do NOT pass a language= param here — the text has already been
+           translated above, so the model speaks the target language automatically.
+           Passing language= can override the voice and cause all output to use
+           the same default model voice. */
         var encodedText = encodeURIComponent(text);
-        /* Add voice + lang hint so the API uses the correct language accent.
-           Cache-buster (_t) prevents browser from reusing a cached response from
-           a previous voice — different voice → new request even for same text. */
         var pollinationsUrl = 'https://audio.pollinations.ai/' + encodedText +
-            '?model=openai-audio&voice=' + pollinationsVoice + '&nologo=true' +
-            (langCode ? '&language=' + encodeURIComponent(langCode) : '') +
-            '&_v=' + pollinationsVoice +
-            '&_t=' + Date.now();
+            '?model=openai-audio' +
+            '&voice='  + pollinationsVoice +
+            '&seed='   + voiceSeed +
+            '&nologo=true' +
+            '&_t='     + Date.now();   /* timestamp prevents browser audio cache reuse */
+
         try {
             var pCtrl = new AbortController();
             var pTid  = setTimeout(function() { pCtrl.abort(); }, 45000);
@@ -351,7 +365,7 @@
             var buffers = [];
             for (var i = 0; i < chunks.length; i++) {
                 setStatus('Generating audio… (' + (i + 1) + '/' + chunks.length + ')', true);
-                buffers.push(await fetchChunk(chunks[i], voice, lang));
+                buffers.push(await fetchChunk(chunks[i], voice));
             }
             var combined = chunks.length > 1 ? concatBuffers(buffers) : buffers[0];
             var blob = new Blob([combined], { type: 'audio/mpeg' });
@@ -468,7 +482,7 @@
         }
     }
 
-    /* ── Translate text — backend first, then direct Pollinations ── */
+    /* ── Translate text via Pollinations AI (no backend required) ── */
     async function translateText(text, lang) {
         var langNames = {
             'fr':'French','de':'German','es':'Spanish','it':'Italian','pt':'Portuguese',
@@ -477,25 +491,12 @@
             'da':'Danish','nb':'Norwegian','ro':'Romanian','cy':'Welsh'
         };
         var langName = langNames[lang] || lang;
-        var sysMsg = 'You are a professional translator. Translate the text into ' + langName +
+        var sysMsg = 'You are a professional translator. Translate the following text into ' + langName +
             '. Output ONLY the translated text — no explanations, no quotes, no extra formatting.';
 
-        /* 1️⃣  Try backend translate proxy (Render server) */
         try {
-            var localRes = await fetch(AQS_LOCAL + '/api/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: text, lang: lang, langName: langName })
-            });
-            if (localRes.ok) {
-                var localData = await localRes.json();
-                var t1 = localData.translated || localData.text || localData.result || '';
-                if (t1 && t1.length > 0) return t1;
-            }
-        } catch (localErr) { /* fall through */ }
-
-        /* 2️⃣  Direct Pollinations translate — free, works without backend */
-        try {
+            var ctrl = new AbortController();
+            var tid  = setTimeout(function() { ctrl.abort(); }, 25000);
             var pRes = await fetch('https://text.pollinations.ai/openai', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -507,15 +508,16 @@
                         { role: 'user',   content: text }
                     ]
                 }),
-                signal: AbortSignal.timeout(25000)
+                signal: ctrl.signal
             });
+            clearTimeout(tid);
             if (pRes.ok) {
                 var pData = await pRes.json();
-                var t2 = ((pData.choices || [])[0] || {}).message && pData.choices[0].message.content || '';
-                t2 = t2.trim();
-                if (t2 && t2.length > 0) return t2;
+                var result = (((pData.choices || [])[0] || {}).message || {}).content || '';
+                result = result.trim();
+                if (result && result.length > 0) return result;
             }
-        } catch(pErr) { /* fall through — return original */ }
+        } catch(e) { /* translation unavailable — return original text */ }
 
         return text;
     }
