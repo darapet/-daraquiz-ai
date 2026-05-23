@@ -1,5 +1,5 @@
 /* AI Quiz System — Image Generator
-   Powered by Darapet — no backend required
+   Powered by Pollinations AI — no backend required
    Developed by Omomo Excellence in corporation with Darapet Technology */
 (function () {
     'use strict';
