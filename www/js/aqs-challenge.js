@@ -31,7 +31,8 @@
       selectedAnswerIdx:-1,  /* -1 = no selection; ≥0 = pending selection not yet confirmed */
       prevScores:{},   /* scores snapshot from the previous question — used to compute deltas */
       prevRanks:{},    /* rank snapshot from the previous question — used to compute rank changes */
-      resultsShown:false  /* guard: prevents showResults() firing more than once per game */
+      resultsShown:false,  /* guard: prevents showResults() firing more than once per game */
+        countdownShown:false  /* guard: non-host players only show the start countdown once */
   };
 
   /* ── Challenge host question pool ─────────────────────────────────── */
@@ -362,12 +363,28 @@
       });
       if(CH.isHost){
           $('#aqs-ch-start-btn').show().off('click').on('click',function(){
-              var $b=$(this);btnLoading($b,'Starting…');
-              $.post(AQS.ajax_url,{action:'aqs_ch_start',nonce:AQS.nonce,code:CH.code},function(res){
-                  if(!res.success){btnRestore($b,'▶ Start Challenge');flash(res.data||'Error');}
-                  /* On success the poll loop will detect phase='active' and transition the screen */
-                  else{ showLobbyCountdown(5, function(){ $b.text('✓ Started!'); }, CH._lastPlayers||[]);  }
-              }).fail(function(){btnRestore($b,'▶ Start Challenge');});
+                var $b=$(this); btnLoading($b,'Starting…');
+                /* ── Show countdown on HOST SIDE first, then tell the server to start.
+                   Non-host players remain on the waiting screen while the host counts down.
+                   The server only sets phase='active' AFTER the host countdown ends, so
+                   everyone’s poll detects the change at the same moment and they all get
+                   their own matching countdown before jumping into questions. ── */
+                CH.countdownShown = true;
+                showLobbyCountdown(5, function(){
+                    $.post(AQS.ajax_url,{action:'aqs_ch_start',nonce:AQS.nonce,code:CH.code},function(res){
+                        if(!res.success){
+                            CH.countdownShown = false;
+                            btnRestore($b,'▶ Start Challenge');
+                            flash(res.data||'Error');
+                        }
+                        /* Poll loop detects phase='active' and transitions the screen */
+                    }).fail(function(){
+                        CH.countdownShown = false;
+                        btnRestore($b,'▶ Start Challenge');
+                        flash('Network error — please try again.');
+                    });
+                }, CH._lastPlayers||[]);
+            });
           });
 
           /* ── Edit Settings panel (host only) ── */
@@ -514,7 +531,7 @@
           if(d.status==='waiting'){
               if(CH.lastPhase==='finished'||CH.resultsShown){
                   /* Host triggered Play Again — all players go back to lobby */
-                  CH.resultsShown=false; CH.lastPhase='';
+                  CH.resultsShown=false; CH.lastPhase=''; CH.countdownShown=false;
                   $('#aqs-ch-play-again').remove();
                   showScreen('aqs-ch-screen-waiting'); initWaitingRoom();
               }
@@ -537,7 +554,28 @@
               return;
           }
           if(d.phase==='active'||d.phase==='reveal'){
-              if(CH.lastPhase==='waiting'||CH.lastPhase===''){showScreen('aqs-ch-screen-game');initGameLayout(d);}
+                if(CH.lastPhase==='waiting'||CH.lastPhase===''){
+                    /* ── Sync countdown for non-host players ─────────────────────────────────
+                       The host already saw a countdown before calling aqs_ch_start (CH.countdownShown=true).
+                       Every other player needs to see the same countdown here, the moment their
+                       poll detects the game starting.  We pause polling, show the 5-second hype
+                       screen, then resume polling and enter the game — so no one lands on the
+                       question screen before the countdown is over. ── */
+                    if(!CH.countdownShown){
+                        CH.countdownShown = true;
+                        stopPolling();
+                        var _savedD = d;
+                        showLobbyCountdown(5, function(){
+                            showScreen('aqs-ch-screen-game');
+                            initGameLayout(_savedD);
+                            renderGameState(_savedD);
+                            startPolling();
+                        }, CH._lastPlayers||[]);
+                        CH.lastPhase = d.phase;
+                        return;
+                    }
+                    showScreen('aqs-ch-screen-game'); initGameLayout(d);
+                }
               /* Coming back from league elimination — remove overlay and reset answered */
               if(CH.lastPhase==='league_elimination'){
                   $('#aqs-ch-league-elim').remove();
@@ -1242,7 +1280,7 @@
               flash('Welcome back, <strong>'+esc(CH.playerName)+'</strong>! Reconnected to challenge <strong>'+CH.code+'</strong>.','success');
 
               if(d.status==='waiting'){
-                  CH.lastPhase='waiting';
+                  CH.countdownShown=false; CH.lastPhase='waiting';
                   initWaitingRoom();
               } else if(d.phase==='active'||d.phase==='reveal'||d.phase==='tiebreaker'||d.phase==='tb_reveal'){
                   showScreen('aqs-ch-screen-game');
