@@ -47,14 +47,14 @@
     /* ══════════════════════════════════════════════════════
        SERVICE WORKER REGISTRATION + AUTO-UPDATE DETECTION
        Uses a RELATIVE path so it works correctly on GitHub
-       Pages subdirectories like /smartquiz-system/
+       Pages subdirectories like /daraquiz-ai/
        ══════════════════════════════════════════════════════ */
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
             var cfg = window.DTS_CONFIG || {};
 
             /* Build a relative SW URL from the current page's directory.
-               e.g. https://darapet.github.io/smartquiz-system/index.html
+               e.g. https://darapet.github.io/daraquiz-ai/index.html
                     → registers at  /smartquiz-system/aqs-sw.js
                This avoids the old bug where /aqs-sw.js (absolute) pointed
                to the wrong location on GitHub Pages subdirectory sites.   */
