@@ -32,7 +32,8 @@
       prevScores:{},   /* scores snapshot from the previous question — used to compute deltas */
       prevRanks:{},    /* rank snapshot from the previous question — used to compute rank changes */
       resultsShown:false,  /* guard: prevents showResults() firing more than once per game */
-        countdownShown:false  /* guard: non-host players only show the start countdown once */
+        countdownShown:false,       /* guard: non-host players only show the start countdown once */
+        leagueRoundTransition:false  /* guard: league round-start hype screen shown once per round */
   };
 
   /* ── Challenge host question pool ─────────────────────────────────── */
@@ -224,8 +225,23 @@
   function btnLoading($b,t){$b.prop('disabled',true).text(t||'Please wait…');}
   function btnRestore($b,t){$b.prop('disabled',false).text(t);}
   function getUrlParam(k){return new URLSearchParams(window.location.search).get(k)||'';}
-  function setUrlCode(c){var u=new URL(window.location.href);u.searchParams.set('aqs_challenge',c);window.history.replaceState({},'',u.toString());}
-  function challengeUrl(c){var u=new URL(window.location.href);u.searchParams.set('aqs_challenge',c);return u.toString();}
+  function setUrlCode(c){
+        var base = (window.location.origin + window.location.pathname).replace(/\?.*$/, '');
+        var u = new URL(base);
+        u.searchParams.set('aqs_challenge', c);
+        window.history.replaceState({}, '', u.toString());
+    }
+  function challengeUrl(c){
+        /* Use AQS_CHALLENGE_BASE_URL if explicitly configured (e.g. when testing
+           from localhost but the real site is on GitHub Pages).  Otherwise fall
+           back to the current page’s origin + path, which strips any existing
+           query string so the invite link is always clean and shareable. */
+        var base = (window.AQS_CHALLENGE_BASE_URL || (window.location.origin + window.location.pathname))
+                       .replace(/\?.*$/, '');
+        var u = new URL(base);
+        u.searchParams.set('aqs_challenge', c);
+        return u.toString();
+    }
   function getPlayerName(players,pos){var p=(players||[]).find(function(x){return parseInt(x.position)===parseInt(pos);});return p?p.player_name:'Player '+(parseInt(pos)+1);}
 
   /* ── Rounds preview helper ─────────────────────────────────────────── */
@@ -384,8 +400,6 @@
                         flash('Network error — please try again.');
                     });
                 }, CH._lastPlayers||[]);
-            });
-          });
 
           /* ── Edit Settings panel (host only) ── */
           $('#aqs-ch-host-controls').show();
@@ -531,7 +545,7 @@
           if(d.status==='waiting'){
               if(CH.lastPhase==='finished'||CH.resultsShown){
                   /* Host triggered Play Again — all players go back to lobby */
-                  CH.resultsShown=false; CH.lastPhase=''; CH.countdownShown=false;
+                  CH.resultsShown=false; CH.lastPhase=''; CH.countdownShown=false; CH.leagueRoundTransition=false;
                   $('#aqs-ch-play-again').remove();
                   showScreen('aqs-ch-screen-waiting'); initWaitingRoom();
               }
@@ -568,8 +582,7 @@
                         showLobbyCountdown(5, function(){
                             showScreen('aqs-ch-screen-game');
                             initGameLayout(_savedD);
-                            renderGameState(_savedD);
-                            startPolling();
+                            startPolling(); /* fetch fresh state immediately */
                         }, CH._lastPlayers||[]);
                         CH.lastPhase = d.phase;
                         return;
@@ -578,9 +591,34 @@
                 }
               /* Coming back from league elimination — remove overlay and reset answered */
               if(CH.lastPhase==='league_elimination'){
-                  $('#aqs-ch-league-elim').remove();
-                  CH.answered=false;
-              }
+                    /* ── League round-start hype screen ─────────────────────────────────
+                       After the elimination overlay, show a brief "Round X of N" countdown
+                       before jumping to questions — so everyone gets a moment to breathe
+                       and sees which round they are entering.  Guard with leagueRoundTransition
+                       so the poll loop (1.5 s) doesn't fire this more than once. ── */
+                    if(!CH.leagueRoundTransition){
+                        CH.leagueRoundTransition = true;
+                        stopPolling();
+                        var _leagueD = d;
+                        var _activePl = d.league_active_players
+                            ? (Array.isArray(d.league_active_players)
+                                ? d.league_active_players
+                                : Object.values(d.league_active_players).map(Number))
+                            : [];
+                        var _roundNum    = parseInt(d.current_round_num) || parseInt(d.round) || 1;
+                        var _totalRounds = parseInt(d.total_rounds) || CH.numRounds || 1;
+                        $('#aqs-ch-league-elim').remove();
+                        showLeagueRoundStart(_roundNum, _totalRounds, _activePl, _leagueD, function(){
+                            CH.answered = false;
+                            CH.leagueRoundTransition = false;
+                            startPolling(); /* fetch fresh server state immediately after countdown */
+                        });
+                        CH.lastPhase = d.phase;
+                        return;
+                    }
+                    $('#aqs-ch-league-elim').remove();
+                    CH.answered = false;
+                }
               renderGameState(d);
           }
           CH.lastPhase=d.phase;
@@ -1087,6 +1125,66 @@
   }
 
   /* ── Scoreboard ──────────────────────────────────────────────────── */
+  
+    /* ── League round-start hype screen ─────────────────────────────── */
+    function showLeagueRoundStart(roundNum, totalRounds, activePlayers, d, onDone){
+        var existing = document.getElementById('aqs-ch-round-start');
+        if(existing) existing.remove();
+
+        var overlay = document.createElement('div');
+        overlay.id  = 'aqs-ch-round-start';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,5,20,.96);'+
+            'display:flex;flex-direction:column;align-items:center;justify-content:center;'+
+            'padding:24px;text-align:center;';
+
+        /* Build player avatars for active players only */
+        var knownPlayers = (d.players||[]).filter(function(p){
+            return activePlayers.indexOf(parseInt(p.position)) > -1;
+        });
+        var avatarRow = '';
+        if(window.AQS_AVATARS && knownPlayers.length){
+            avatarRow = '<div style="display:flex;justify-content:center;gap:18px;margin-bottom:20px">';
+            knownPlayers.forEach(function(p){
+                avatarRow += '<div style="display:flex;flex-direction:column;align-items:center;gap:6px">';
+                avatarRow += window.AQS_AVATARS.avatar(p.player_name, 56, p.character_id, p.position);
+                avatarRow += '<div style="font-size:.75rem;color:#94a3b8;font-weight:700">'+
+                    (p.player_name.length>10 ? p.player_name.substring(0,9)+'…' : p.player_name)+'</div>';
+                avatarRow += '</div>';
+            });
+            avatarRow += '</div>';
+        }
+
+        overlay.innerHTML =
+            '<div style="max-width:400px;width:100%">'+
+            '<div style="font-size:.8rem;font-weight:900;letter-spacing:.2em;color:#6366f1;margin-bottom:8px">LEAGUE MODE</div>'+
+            '<div style="font-size:2.2rem;font-weight:900;color:#e2e8f0;margin-bottom:4px">⚡ Round '+roundNum+' of '+totalRounds+'</div>'+
+            '<div style="font-size:.9rem;color:#94a3b8;margin-bottom:22px">'+knownPlayers.length+' player'+(knownPlayers.length!==1?'s':'')+' remaining</div>'+
+            avatarRow+
+            '<div style="font-size:.82rem;color:#64748b;margin-bottom:8px">Starting in</div>'+
+            '<div id="aqs-ch-rs-num" style="font-size:4rem;font-weight:900;color:#a5b4fc;line-height:1">3</div>'+
+            '</div>';
+        document.body.appendChild(overlay);
+
+        var left = 3;
+        var $num = overlay.querySelector('#aqs-ch-rs-num');
+        function tick(){
+            if(!$num) return; /* safety guard — should not happen */
+            if(left <= 0){
+                $num.textContent = 'GO!';
+                $num.style.color = '#86efac';
+                setTimeout(function(){
+                    if(overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                    if(typeof onDone === 'function') onDone();
+                }, 600);
+            } else {
+                $num.textContent = left;
+                left--;
+                setTimeout(tick, 1000);
+            }
+        }
+        tick();
+    }
+
   function buildScoreboard(d){
       /* Cache char IDs for speech system */
       CH._playerChars = {};
@@ -1280,9 +1378,12 @@
               flash('Welcome back, <strong>'+esc(CH.playerName)+'</strong>! Reconnected to challenge <strong>'+CH.code+'</strong>.','success');
 
               if(d.status==='waiting'){
-                  CH.countdownShown=false; CH.lastPhase='waiting';
+                  CH.countdownShown=false; CH.leagueRoundTransition=false; CH.lastPhase='waiting';
                   initWaitingRoom();
               } else if(d.phase==='active'||d.phase==='reveal'||d.phase==='tiebreaker'||d.phase==='tb_reveal'){
+                  /* Rejoining mid-game: game already started, skip all countdown screens */
+                  CH.countdownShown = true;
+                  CH.leagueRoundTransition = false;
                   showScreen('aqs-ch-screen-game');
                   initGameLayout(d);
                   if(d.phase==='tiebreaker'||d.phase==='tb_reveal') renderTiebreaker(d);
