@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,8 +22,85 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Grant Gradle execute permission
-        run: chmod +x android/gradlew
+      - name: Fix missing capacitor-cordova-android-plugins
+        run: |
+          mkdir -p android/capacitor-cordova-android-plugins/src/main
+
+          cat > android/capacitor-cordova-android-plugins/cordova.variables.gradle << 'EOF'
+          ext {
+            cdvMinSdkVersion = project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 24
+            cdvPluginPostBuildExtras = []
+            cordovaConfig = [:]
+          }
+          EOF
+
+          cat > android/capacitor-cordova-android-plugins/build.gradle << 'EOF'
+          ext {
+              androidxAppCompatVersion = project.hasProperty('androidxAppCompatVersion') ? rootProject.ext.androidxAppCompatVersion : '1.7.1'
+              cordovaAndroidVersion = project.hasProperty('cordovaAndroidVersion') ? rootProject.ext.cordovaAndroidVersion : '14.0.1'
+          }
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.13.0'
+              }
+          }
+          apply plugin: 'com.android.library'
+          android {
+              namespace = "capacitor.cordova.android.plugins"
+              compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
+              defaultConfig {
+                  minSdkVersion project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 24
+                  targetSdkVersion project.hasProperty('targetSdkVersion') ? rootProject.ext.targetSdkVersion : 36
+                  versionCode 1
+                  versionName "1.0"
+              }
+              lintOptions {
+                  abortOnError = false
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_21
+                  targetCompatibility JavaVersion.VERSION_21
+              }
+          }
+          repositories {
+              google()
+              mavenCentral()
+              flatDir{ dirs 'src/main/libs', 'libs' }
+          }
+          dependencies {
+              implementation fileTree(dir: 'src/main/libs', include: ['*.jar'])
+              implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+              implementation "org.apache.cordova:framework:$cordovaAndroidVersion"
+          }
+          apply from: "cordova.variables.gradle"
+          for (def func : cdvPluginPostBuildExtras) { func() }
+          EOF
+
+          cat > android/capacitor-cordova-android-plugins/src/main/AndroidManifest.xml << 'EOF'
+          <?xml version='1.0' encoding='utf-8'?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:amazon="http://schemas.amazon.com/apk/res/android">
+          <application></application>
+          </manifest>
+          EOF
+
+          echo "Done! Files created:"
+          ls android/capacitor-cordova-android-plugins/
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Generate Gradle Wrapper
+        run: |
+          cd android
+          gradle wrapper --gradle-version=8.14.3
+          chmod +x gradlew
 
       - name: Build Debug APK
         run: |
