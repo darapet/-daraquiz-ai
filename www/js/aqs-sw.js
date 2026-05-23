@@ -2,13 +2,11 @@
    HOW TO PUSH AN UPDATE: just bump the CACHE version below (e.g. xzily-v3, xzily-v4…)
    Users will automatically see an "Update available" banner without reinstalling. */
 var CACHE = 'xzily-v3';
-var SHELL = ['/'];
 
 self.addEventListener('install', function (e) {
     /* Do NOT skipWaiting automatically — let the user choose when to update */
-    e.waitUntil(
-        caches.open(CACHE).then(function (c) { return c.addAll(SHELL); }).catch(function () {})
-    );
+    /* (No SHELL pre-cache — avoids errors on GitHub Pages subdirectory sites) */
+    /* New SW waits until user clicks "Update Now" before taking over */
 });
 
 self.addEventListener('activate', function (e) {
@@ -27,7 +25,14 @@ self.addEventListener('activate', function (e) {
 /* ── Message handler: page sends SKIP_WAITING to trigger the update ── */
 self.addEventListener('message', function (e) {
     if (e.data && e.data.type === 'SKIP_WAITING') {
-        self.skipWaiting();
+        self.skipWaiting().then(function () {
+            /* Notify all open clients to reload after SW takes control */
+            self.clients.matchAll({ includeUncontrolled: true }).then(function (clients) {
+                clients.forEach(function (client) {
+                    client.postMessage({ type: 'SW_UPDATED' });
+                });
+            });
+        });
     }
 });
 
@@ -39,6 +44,11 @@ self.addEventListener('fetch', function (e) {
     if (url.indexOf('wp-admin') !== -1) return;
     if (url.indexOf('wp-login') !== -1) return;
     if (!url.startsWith('http')) return;
+    /* Never intercept external API calls (Pollinations, Firebase, Groq) */
+    if (url.indexOf('pollinations.ai') !== -1) return;
+    if (url.indexOf('firebaseapp.com') !== -1) return;
+    if (url.indexOf('googleapis.com') !== -1) return;
+    if (url.indexOf('groq.com') !== -1) return;
 
     /* Network-first for HTML pages (always fresh content) */
     var dest = req.destination;
@@ -46,7 +56,7 @@ self.addEventListener('fetch', function (e) {
         e.respondWith(
             fetch(req).catch(function () {
                 return caches.match(req).then(function (r) {
-                    return r || caches.match('/');
+                    return r || caches.match('./');
                 });
             })
         );
