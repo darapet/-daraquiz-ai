@@ -1,5 +1,5 @@
 /* AI Quiz System — Image Generator
-   Powered by Pollinations AI — no backend required
+   Powered by Darapet — no backend required
    Developed by Omomo Excellence in corporation with Darapet Technology */
 (function () {
     'use strict';
@@ -137,6 +137,9 @@
         'extra limbs','duplicate','tiling','ugly','poorly drawn','low res','draft'
     ].join(','));
 
+    /* ── Detect native Capacitor (Android/iOS) ── */
+    var _isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
     /* ── Pollinations image URL ── */
     function pollinationsImgUrl(prompt, width, height, seed, model) {
         var encoded = encodeURIComponent(prompt);
@@ -157,12 +160,18 @@
     /* ─────────────────────────────────────────────────────────────
        IMAGE LOAD — load a single image with retry across models
        Tries flux → turbo → flux-pro, with back-off between attempts.
+
+       On native Android/iOS (Capacitor) we MUST NOT set crossOrigin
+       because the WebView origin is capacitor://localhost which is
+       not in Pollinations' CORS allowlist — setting crossOrigin
+       triggers a CORS preflight that always fails, blocking the image.
     ───────────────────────────────────────────────────────────── */
     function loadImageDirect(prompt, width, height, seed, model) {
         return new Promise(function (resolve, reject) {
             var url = pollinationsImgUrl(prompt, width, height, seed, model);
             var img = new Image();
-            img.crossOrigin = 'anonymous';
+            /* Only set crossOrigin on the web — not on native Android/iOS */
+            if (!_isNative) img.crossOrigin = 'anonymous';
             var tid = setTimeout(function () { img.src = ''; reject(new Error('timeout')); }, 55000);
             img.onload  = function () { clearTimeout(tid); resolve({ url: url, img: img }); };
             img.onerror = function () { clearTimeout(tid); reject(new Error('load error')); };
