@@ -1,106 +1,104 @@
-================================================================
-CHAT HISTORY PANEL — Two files to edit
-  FILE A: www/studio.html    (add button + drawer HTML + CSS)
-  FILE B: www/js/aqs-studio.js  (add drawer JS)
-================================================================
-Apply FILE A first, then FILE B.
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AI Studio — XZILY AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/aqs-studio.css">
+<link rel="stylesheet" href="css/aqs-sidebar.css">
+<link rel="stylesheet" href="css/aqs-notifications.css">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" as="style" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
 
-════════════════════════════════════════════════════════════════
-FILE A — www/studio.html
-════════════════════════════════════════════════════════════════
+<script type="module" src="js/aqs-firebase.js"></script>
 
-EDIT A1 — Add CSS for the history drawer
-FIND this line inside the <style> block (it already exists):
-────────────────────────────────────────────────────────────────
-        .dts-history-section{margin-top:16px}
+<script>
+window.AQS = {
+    ajax_url:'firebase',nonce:'',auth_nonce:'',
+    home_url:'index.html',create_page_url:'create-quiz.html',
+    dashboard_url:'dashboard.html',results_url:'quiz-results.html',
+    take_url:'take-quiz.html',register_url:'register.html',login_url:'login.html',
+    user_dashboard_url:'user-dashboard.html',challenge_url:'challenge.html',
+    studio_url:'studio.html',is_admin:'',is_host:'',is_logged_in:'',
+    current_user_name:'',current_user_role:'',
+    groq_key:'',plugin_url:'./'
+};
+var AQS_CONTEXT='studio';
+var AQS_SPLASH={enabled:'0',once:'1',template:'1',app_name:'AI Studio',tagline:'Powered by XZILY AI',logo_url:'',color_primary:'#6366f1',color_bg:'',color_text:'',duration:'3',sound:'0',music_url:''};
+</script>
 
-ADD these lines DIRECTLY AFTER that line:
-────────────────────────────────────────────────────────────────
-        /* ── History nav button (top-right floating) ── */
-        #dts-hist-btn{position:fixed;top:12px;right:14px;z-index:10003;
-          background:rgba(99,102,241,0.15);border:1.5px solid rgba(99,102,241,0.35);
-          color:#a5b4fc;border-radius:10px;padding:7px 13px;font-size:0.78rem;
-          font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;
-          backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-          transition:background .2s,color .2s;}
-        #dts-hist-btn:hover{background:rgba(99,102,241,0.3);color:#fff;}
-        #dts-hist-btn svg{flex-shrink:0;}
-        /* ── History overlay ── */
-        #dts-history-overlay{display:none;position:fixed;inset:0;
-          background:rgba(0,0,0,0.45);z-index:10004;backdrop-filter:blur(2px);}
-        #dts-history-overlay.open{display:block;}
-        /* ── History drawer (slides in from right) ── */
-        #dts-history-drawer{position:fixed;top:0;right:0;bottom:0;width:min(340px,95vw);
-          background:#1e1b4b;border-left:1px solid rgba(99,102,241,0.25);
-          z-index:10005;display:flex;flex-direction:column;
-          transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
-          overflow:hidden;}
-        #dts-history-drawer.open{transform:translateX(0);}
-        /* drawer header */
-        #dts-drawer-header{display:flex;align-items:center;gap:10px;
-          padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.08);
-          flex-shrink:0;}
-        #dts-drawer-title{flex:1;font-size:1rem;font-weight:700;color:#e0e7ff;}
-        #dts-drawer-new-btn{background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);
-          color:#a5b4fc;border-radius:8px;padding:5px 11px;font-size:0.78rem;
-          font-weight:600;cursor:pointer;}
-        #dts-drawer-new-btn:hover{background:rgba(99,102,241,0.35);}
-        #dts-drawer-cancel{background:none;border:none;color:#9ca3af;cursor:pointer;
-          padding:4px 8px;border-radius:6px;font-size:0.85rem;display:flex;
-          align-items:center;gap:4px;transition:color .15s;}
-        #dts-drawer-cancel:hover{color:#f87171;}
-        /* drawer list */
-        #dts-drawer-list-wrap{flex:1;overflow-y:auto;padding:10px 0;}
-        .dts-drawer-item{display:flex;align-items:center;gap:8px;
-          padding:10px 16px;cursor:pointer;border-radius:0;
-          font-size:0.85rem;color:#d1d5db;transition:background .15s;}
-        .dts-drawer-item:hover{background:rgba(255,255,255,0.07);}
-        .dts-drawer-item.active{background:rgba(99,102,241,0.3);color:#fff;}
-        .dts-drawer-item-icon{font-size:1rem;flex-shrink:0;}
-        .dts-drawer-item-body{flex:1;min-width:0;}
-        .dts-drawer-item-title{white-space:nowrap;overflow:hidden;
-          text-overflow:ellipsis;font-weight:600;}
-        .dts-drawer-item-time{font-size:0.72rem;color:#6b7280;margin-top:2px;}
-        .dts-drawer-item-del{opacity:0;background:none;border:none;
-          color:#9ca3af;cursor:pointer;padding:4px 6px;border-radius:6px;
-          flex-shrink:0;font-size:0.78rem;transition:opacity .15s,color .15s;}
-        .dts-drawer-item:hover .dts-drawer-item-del{opacity:1;}
-        .dts-drawer-item-del:hover{color:#f87171;background:rgba(239,68,68,0.12);}
-        .dts-drawer-empty{padding:24px 16px;color:#6b7280;font-size:0.85rem;
-          font-style:italic;text-align:center;}
-        /* drawer footer */
-        #dts-drawer-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08);
-          flex-shrink:0;}
-        #dts-drawer-clear-btn{width:100%;background:rgba(239,68,68,0.1);
-          border:1px solid rgba(239,68,68,0.25);color:#f87171;
-          border-radius:8px;padding:8px;font-size:0.8rem;font-weight:600;cursor:pointer;}
-        #dts-drawer-clear-btn:hover{background:rgba(239,68,68,0.22);}
+<style>
+#dts-hist-btn{position:fixed;top:12px;right:14px;z-index:10003;
+  background:rgba(99,102,241,0.15);border:1.5px solid rgba(99,102,241,0.35);
+  color:#a5b4fc;border-radius:10px;padding:7px 13px;font-size:0.78rem;
+  font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  transition:background .2s,color .2s;}
+#dts-hist-btn:hover{background:rgba(99,102,241,0.3);color:#fff;}
+#dts-history-overlay{display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,0.45);z-index:10004;backdrop-filter:blur(2px);}
+#dts-history-overlay.open{display:block;}
+#dts-history-drawer{position:fixed;top:0;right:0;bottom:0;width:min(340px,95vw);
+  background:#1e1b4b;border-left:1px solid rgba(99,102,241,0.25);
+  z-index:10005;display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);
+  overflow:hidden;}
+#dts-history-drawer.open{transform:translateX(0);}
+#dts-drawer-header{display:flex;align-items:center;gap:10px;
+  padding:16px 16px 12px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0;}
+#dts-drawer-title{flex:1;font-size:1rem;font-weight:700;color:#e0e7ff;}
+#dts-drawer-new-btn{background:rgba(99,102,241,0.2);border:1px solid rgba(99,102,241,0.4);
+  color:#a5b4fc;border-radius:8px;padding:5px 11px;font-size:0.78rem;font-weight:600;cursor:pointer;}
+#dts-drawer-cancel{background:none;border:none;color:#9ca3af;cursor:pointer;
+  padding:4px 8px;border-radius:6px;font-size:0.85rem;display:flex;align-items:center;gap:4px;}
+#dts-drawer-list-wrap{flex:1;overflow-y:auto;padding:10px 0;}
+.dts-drawer-item{display:flex;align-items:center;gap:8px;padding:10px 16px;
+  cursor:pointer;font-size:0.85rem;color:#d1d5db;transition:background .15s;}
+.dts-drawer-item:hover{background:rgba(255,255,255,0.07);}
+.dts-drawer-item.active{background:rgba(99,102,241,0.3);color:#fff;}
+.dts-drawer-item-icon{font-size:1rem;flex-shrink:0;}
+.dts-drawer-item-body{flex:1;min-width:0;}
+.dts-drawer-item-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;}
+.dts-drawer-item-time{font-size:0.72rem;color:#6b7280;margin-top:2px;}
+.dts-drawer-item-del{opacity:0;background:none;border:none;color:#9ca3af;cursor:pointer;
+  padding:4px 6px;border-radius:6px;flex-shrink:0;font-size:0.78rem;transition:opacity .15s,color .15s;}
+.dts-drawer-item:hover .dts-drawer-item-del{opacity:1;}
+.dts-drawer-item-del:hover{color:#f87171;}
+.dts-drawer-empty{padding:24px 16px;color:#6b7280;font-size:0.85rem;font-style:italic;text-align:center;}
+#dts-drawer-footer{padding:12px 16px;border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0;}
+#dts-drawer-clear-btn{width:100%;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);
+  color:#f87171;border-radius:8px;padding:8px;font-size:0.8rem;font-weight:600;cursor:pointer;}
+.dts-history-section{margin-top:16px;}
+.dts-history-section-label{font-size:0.68rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:1.5px;padding:8px 10px 4px;}
+.dts-history-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;color:#94a3b8;font-size:0.83rem;transition:background .15s,color .15s;}
+.dts-history-item:hover{background:rgba(255,255,255,0.07);color:#e2e8f0;}
+.dts-history-item.active{background:rgba(99,102,241,0.25);color:#a5b4fc;}
+.dts-history-item-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dts-history-item-del{opacity:0;background:none;border:none;color:#6b7280;cursor:pointer;padding:2px 5px;border-radius:4px;font-size:0.75rem;flex-shrink:0;}
+.dts-history-item:hover .dts-history-item-del{opacity:1;}
+.dts-history-item-del:hover{color:#f87171;}
+#dts-history-empty{padding:8px 12px;color:#475569;font-size:0.78rem;font-style:italic;}
+#dts-import-banner{display:none;margin:0 24px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px;font-size:0.85rem;color:#166534;align-items:flex-start;gap:10px;}
+#dts-import-banner.visible{display:flex;}
+#dts-import-use-btn{background:#166534;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap;margin-top:2px;}
+</style>
+</head>
+<body class="dts-body">
 
-════════════════════════════════════════════════════════════════
-
-EDIT A2 — Add History button + Drawer HTML
-FIND this line (it's near the top of <body>):
-────────────────────────────────────────────────────────────────
-<button class="aqs-sidebar-mobile-toggle" id="aqs-sidebar-toggle" aria-label="Open navigation">
-
-ADD these three blocks DIRECTLY BEFORE that line:
-────────────────────────────────────────────────────────────────
-
-<!-- ══ HISTORY NAV BUTTON ══ -->
-<button id="dts-hist-btn" aria-label="Chat history" title="Chat History">
+<button id="dts-hist-btn" aria-label="Chat history">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
     History
 </button>
 
-<!-- ══ HISTORY OVERLAY ══ -->
 <div id="dts-history-overlay"></div>
 
-<!-- ══ HISTORY DRAWER ══ -->
 <div id="dts-history-drawer" role="dialog" aria-label="Chat history panel">
     <div id="dts-drawer-header">
         <span id="dts-drawer-title">💬 Chat History</span>
         <button id="dts-drawer-new-btn">＋ New Chat</button>
-        <button id="dts-drawer-cancel" aria-label="Close history panel">
+        <button id="dts-drawer-cancel">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             Cancel
         </button>
@@ -115,272 +113,187 @@ ADD these three blocks DIRECTLY BEFORE that line:
     </div>
 </div>
 
-════════════════════════════════════════════════════════════════
-FILE B — www/js/aqs-studio.js
-════════════════════════════════════════════════════════════════
+<button class="aqs-sidebar-mobile-toggle" id="aqs-sidebar-toggle" aria-label="Open navigation">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+</button>
 
-EDIT B1 — Add setupHistoryDrawer to the init steps list
-FIND this line (around line 41):
-────────────────────────────────────────────────────────────────
-        var steps = [setupMarked, setupInput, setupSidebar, setupSuggestions,
-                     setupNewChat, setupFileUpload, setupVoice, renderHistoryList];
+<div class="dts-overlay" id="dts-overlay"></div>
 
-REPLACE WITH:
-────────────────────────────────────────────────────────────────
-        var steps = [setupMarked, setupInput, setupSidebar, setupSuggestions,
-                     setupNewChat, setupFileUpload, setupVoice, renderHistoryList,
-                     setupHistoryDrawer];
+<div id="dts-import-banner">
+    <span style="font-size:1.4rem;line-height:1;">📥</span>
+    <div style="flex:1;">
+        <strong>Quiz imported from Create Quiz page</strong>
+        <p style="margin:4px 0 8px;font-size:0.82rem;" id="dts-import-desc">Questions ready to use.</p>
+        <button id="dts-import-use-btn">Use Questions in Create Quiz →</button>
+    </div>
+</div>
 
-════════════════════════════════════════════════════════════════
+<div id="dts-app">
 
-EDIT B2 — Add setupHistoryDrawer function + update renderHistoryList
-FIND this line (around line 802):
-────────────────────────────────────────────────────────────────
-    function renderHistoryList() {
-        var list    = document.getElementById('dts-history-list');
-        var empty   = document.getElementById('dts-history-empty');
-        if (!list) return;
-        var history = loadHistory();
+    <aside class="dts-sidebar" id="dts-sidebar">
+        <div class="dts-logo-wrap">
+            <svg width="32" height="32" viewBox="0 0 36 36" fill="none">
+                <polygon points="18,2 34,10 34,26 18,34 2,26 2,10" fill="#6366f1" opacity="0.9"/>
+                <polygon points="18,8 28,13 28,23 18,28 8,23 8,13" fill="white" opacity="0.15"/>
+                <circle cx="18" cy="18" r="5" fill="white"/>
+            </svg>
+            <div class="dts-logo-text">
+                <div class="dts-logo-name">AI Studio</div>
+                <div class="dts-logo-sub">XZILY AI</div>
+            </div>
+        </div>
 
-        /* Remove old items (keep the empty placeholder) */
-        Array.from(list.querySelectorAll('.dts-history-item')).forEach(function (el) { el.remove(); });
+        <button class="dts-new-chat-btn" id="dts-new-chat">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Chat
+        </button>
 
-        if (history.length === 0) {
-            if (empty) empty.style.display = '';
-            return;
-        }
-        if (empty) empty.style.display = 'none';
+        <nav class="dts-nav">
+            <div class="dts-nav-section-label">Tools</div>
+            <a href="index.html" class="dts-nav-link">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                Home
+            </a>
+            <a href="create-quiz.html" class="dts-nav-link">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Create Quiz
+            </a>
+            <a href="image-gen.html" class="dts-nav-link">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                Image AI
+            </a>
+            <a href="tts.html" class="dts-nav-link">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                Text to Speech
+            </a>
+            <a href="challenge.html" class="dts-nav-link">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                Challenge
+            </a>
 
-        history.forEach(function (entry) {
-            var item = document.createElement('div');
-            item.className = 'dts-history-item' + (entry.id === currentChatId ? ' active' : '');
-            item.dataset.id = entry.id;
+            <div class="dts-nav-divider"></div>
+            <div class="dts-nav-section-label">History</div>
+            <div class="dts-history-section" id="dts-history-section">
+                <div id="dts-history-list"></div>
+                <div id="dts-history-empty">No conversations yet</div>
+            </div>
+        </nav>
 
-            var titleEl = document.createElement('span');
-            titleEl.className = 'dts-history-item-title';
-            titleEl.textContent = entry.title;
-            titleEl.title = entry.title;
+        <div class="dts-sidebar-footer">
+            <div class="dts-user-row">
+                <div class="dts-user-avatar" id="dts-user-avatar">U</div>
+                <div style="flex:1;min-width:0;">
+                    <div class="dts-user-name" id="dts-user-name">Guest</div>
+                    <div class="dts-user-role" id="dts-user-role">member</div>
+                </div>
+            </div>
+            <a href="index.html" class="dts-nav-link" style="margin-top:4px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                Back to Home
+            </a>
+        </div>
+    </aside>
 
-            var delBtn = document.createElement('button');
-            delBtn.className = 'dts-history-item-del';
-            delBtn.textContent = '✕';
-            delBtn.title = 'Delete conversation';
-            delBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                if (confirm('Delete this conversation?')) deleteChat(entry.id);
-            });
+    <main class="dts-main" id="dts-main">
+        <div class="dts-messages" id="dts-messages">
+            <div class="dts-welcome" id="dts-welcome">
+                <div class="dts-welcome-icon">
+                    <svg width="56" height="56" viewBox="0 0 36 36" fill="none">
+                        <polygon points="18,2 34,10 34,26 18,34 2,26 2,10" fill="#6366f1" opacity="0.9"/>
+                        <polygon points="18,8 28,13 28,23 18,28 8,23 8,13" fill="white" opacity="0.15"/>
+                        <circle cx="18" cy="18" r="5" fill="white"/>
+                    </svg>
+                </div>
+                <h1 class="dts-welcome-title">What can I help you with?</h1>
+                <p class="dts-welcome-sub">Ask me anything — I can answer questions, explain topics, help you study, create content, and more.</p>
+                <div class="dts-suggestions" id="dts-suggestions">
+                    <button class="dts-suggestion-btn" data-text="Generate 10 multiple choice questions on human body systems for grade 10">📝 Generate quiz questions for me</button>
+                    <button class="dts-suggestion-btn" data-text="Explain the difference between mitosis and meiosis in simple terms">🔬 Explain a science concept</button>
+                    <button class="dts-suggestion-btn" data-text="Write a short essay outline on climate change and its effects on agriculture">✍️ Help me write an essay</button>
+                    <button class="dts-suggestion-btn" data-text="Create a study plan for a mathematics exam covering algebra and geometry">📚 Make a study plan</button>
+                </div>
+            </div>
+        </div>
 
-            item.appendChild(titleEl);
-            item.appendChild(delBtn);
-            item.addEventListener('click', function () { loadChat(entry.id); });
-            list.appendChild(item);
-        });
-    }
+        <div class="dts-typing" id="dts-typing" style="display:none;">
+            <div style="background:#0f172a;color:#fff;font-size:1rem;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">⬡</div>
+            <div class="dts-typing-dots"><span></span><span></span><span></span></div>
+        </div>
 
-REPLACE WITH (adds drawer rendering too):
-────────────────────────────────────────────────────────────────
-    /* ── Format relative time for history items ── */
-    function _relTime(ts) {
-        var diff = Date.now() - ts;
-        if (diff < 60000)  return 'Just now';
-        if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
-        if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
-        return Math.floor(diff / 86400000) + 'd ago';
-    }
+        <div class="dts-footer">
+            <div class="dts-file-status" id="dts-file-status" style="display:none;">
+                <span class="dts-file-attached" id="dts-file-name"></span>
+                <button class="dts-file-clear" id="dts-file-clear">✕</button>
+            </div>
+            <div id="dts-img-preview-wrap" style="display:none;align-items:center;gap:8px;padding:6px 10px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;margin-bottom:8px;max-width:860px;margin-left:auto;margin-right:auto;">
+                <img id="dts-img-preview-thumb" src="" alt="preview" style="width:44px;height:44px;border-radius:7px;object-fit:cover;flex-shrink:0;border:1px solid #e2e8f0;">
+                <span id="dts-img-preview-label" style="flex:1;font-size:0.78rem;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                <button id="dts-img-clear" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1rem;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">✕</button>
+            </div>
+            <div class="dts-input-wrap">
+                <textarea class="dts-input" id="dts-input" placeholder="Message AI Studio…" rows="1" autocomplete="off" spellcheck="true"></textarea>
+                <input type="file" id="dts-file-input" style="display:none;" accept=".pdf,.doc,.docx,.txt,.md,.csv">
+                <input type="file" id="dts-img-input" style="display:none;" accept="image/*" capture="environment">
+                <button class="dts-file-btn" id="dts-file-btn" title="Attach document">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <button class="dts-img-btn" id="dts-img-btn" title="Attach image">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                </button>
+                <button class="dts-voice-btn" id="dts-voice-btn" title="Voice conversation">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                </button>
+                <button class="dts-send-btn" id="dts-send" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+            </div>
+            <p class="dts-disclaimer">AI Studio can make mistakes. Always verify important information.</p>
+        </div>
+    </main>
+</div>
 
-    function renderHistoryList() {
-        var history = loadHistory();
+<div class="dts-voice-overlay" id="dts-voice-overlay" style="display:none;">
+    <div class="dts-voice-modal">
+        <button class="dts-voice-close" id="dts-voice-close">✕</button>
+        <div class="dts-voice-orb" id="dts-voice-orb" data-state="idle">
+            <div class="dts-voice-ring dts-voice-ring1"></div>
+            <div class="dts-voice-ring dts-voice-ring2"></div>
+            <div class="dts-voice-ring dts-voice-ring3"></div>
+            <div class="dts-voice-orb-inner">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>
+            </div>
+        </div>
+        <div class="dts-voice-status" id="dts-voice-status">Tap to start listening</div>
+        <div class="dts-voice-transcript" id="dts-voice-transcript"></div>
+        <textarea id="dts-voice-text-fallback" style="display:none;width:100%;background:rgba(255,255,255,0.08);border:1px solid rgba(99,102,241,0.3);color:#e2e8f0;border-radius:10px;padding:10px 14px;font-size:0.9rem;font-family:inherit;resize:none;outline:none;" rows="2" placeholder="Type your message here…"></textarea>
+        <button id="dts-voice-text-send" style="display:none;background:#6366f1;border:none;color:#fff;border-radius:10px;padding:9px 20px;font-size:0.88rem;font-weight:600;cursor:pointer;width:100%;">Send Message</button>
+        <p id="dts-voice-fallback-note" style="display:none;font-size:0.75rem;color:#475569;text-align:center;">Voice input not available — use the text box above.</p>
+        <div class="dts-voice-hint" id="dts-voice-hint">Speak clearly — I'll reply out loud</div>
+        <div class="dts-voice-controls">
+            <button class="dts-voice-toggle-btn" id="dts-voice-toggle">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+                Start Listening
+            </button>
+            <button class="dts-voice-end-btn" id="dts-voice-end">End Conversation</button>
+        </div>
+    </div>
+</div>
 
-        /* ── Sidebar list (existing) ── */
-        var list  = document.getElementById('dts-history-list');
-        var empty = document.getElementById('dts-history-empty');
-        if (list) {
-            Array.from(list.querySelectorAll('.dts-history-item')).forEach(function (el) { el.remove(); });
-            if (history.length === 0) {
-                if (empty) empty.style.display = '';
-            } else {
-                if (empty) empty.style.display = 'none';
-                history.forEach(function (entry) {
-                    var item = document.createElement('div');
-                    item.className = 'dts-history-item' + (entry.id === currentChatId ? ' active' : '');
-                    item.dataset.id = entry.id;
-                    var titleEl = document.createElement('span');
-                    titleEl.className = 'dts-history-item-title';
-                    titleEl.textContent = entry.title;
-                    titleEl.title = entry.title;
-                    var delBtn = document.createElement('button');
-                    delBtn.className = 'dts-history-item-del';
-                    delBtn.textContent = '✕';
-                    delBtn.title = 'Delete conversation';
-                    delBtn.addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        if (confirm('Delete this conversation?')) deleteChat(entry.id);
-                    });
-                    item.appendChild(titleEl);
-                    item.appendChild(delBtn);
-                    item.addEventListener('click', function () { loadChat(entry.id); });
-                    list.appendChild(item);
-                });
-            }
-        }
-
-        /* ── History drawer list (new) ── */
-        var drawerList = document.getElementById('dts-drawer-list');
-        if (!drawerList) return;
-        drawerList.innerHTML = '';
-
-        if (history.length === 0) {
-            drawerList.innerHTML = '<div class="dts-drawer-empty">No conversations yet — start chatting and they\'ll appear here!</div>';
-            return;
-        }
-
-        history.forEach(function (entry) {
-            var item = document.createElement('div');
-            item.className = 'dts-drawer-item' + (entry.id === currentChatId ? ' active' : '');
-            item.dataset.id = entry.id;
-            item.innerHTML =
-                '<span class="dts-drawer-item-icon">💬</span>' +
-                '<div class="dts-drawer-item-body">' +
-                    '<div class="dts-drawer-item-title">' + (entry.title || 'Chat').replace(/</g,'&lt;') + '</div>' +
-                    '<div class="dts-drawer-item-time">' + _relTime(entry.timestamp || 0) + '</div>' +
-                '</div>' +
-                '<button class="dts-drawer-item-del" title="Delete">✕</button>';
-
-            item.querySelector('.dts-drawer-item-del').addEventListener('click', function (e) {
-                e.stopPropagation();
-                if (confirm('Delete this conversation?')) deleteChat(entry.id);
-            });
-            item.addEventListener('click', function () {
-                loadChat(entry.id);
-                closeHistoryDrawer();
-            });
-            drawerList.appendChild(item);
-        });
-    }
-
-    /* ── History drawer open / close ── */
-    function openHistoryDrawer() {
-        renderHistoryList(); /* refresh before opening */
-        var drawer = document.getElementById('dts-history-drawer');
-        var overlay = document.getElementById('dts-history-overlay');
-        if (drawer)  drawer.classList.add('open');
-        if (overlay) overlay.classList.add('open');
-    }
-
-    function closeHistoryDrawer() {
-        var drawer = document.getElementById('dts-history-drawer');
-        var overlay = document.getElementById('dts-history-overlay');
-        if (drawer)  drawer.classList.remove('open');
-        if (overlay) overlay.classList.remove('open');
-    }
-
-    function setupHistoryDrawer() {
-        /* Open button */
-        var histBtn = document.getElementById('dts-hist-btn');
-        if (histBtn) histBtn.addEventListener('click', openHistoryDrawer);
-
-        /* Cancel / close button */
-        var cancelBtn = document.getElementById('dts-drawer-cancel');
-        if (cancelBtn) cancelBtn.addEventListener('click', closeHistoryDrawer);
-
-        /* Overlay click closes drawer */
-        var overlay = document.getElementById('dts-history-overlay');
-        if (overlay) overlay.addEventListener('click', closeHistoryDrawer);
-
-        /* New chat from drawer */
-        var newBtn = document.getElementById('dts-drawer-new-btn');
-        if (newBtn) newBtn.addEventListener('click', function () {
-            startNewChat();
-            closeHistoryDrawer();
-        });
-
-        /* Clear all history */
-        var clearBtn = document.getElementById('dts-drawer-clear-btn');
-        if (clearBtn) clearBtn.addEventListener('click', function () {
-            if (confirm('Clear ALL chat history? This cannot be undone.')) {
-                saveHistory([]);
-                startNewChat();
-                renderHistoryList();
-                closeHistoryDrawer();
-            }
-        });
-    }
-
-================================================================
-HOW IT WORKS:
-  • A "History" button appears top-right (above the chat area)
-  • Tapping it slides in a panel from the RIGHT side of the screen
-  • The LEFT sidebar (hamburger menu) is NOT affected at all
-  • Each conversation shows its title and relative time
-  • Tap a conversation to load it (drawer closes automatically)
-  • Tap ✕ on any conversation to delete it
-  • "Clear All" at the bottom wipes everything
-  • Cancel / tap the dark overlay to dismiss the drawer
-  • Back button (Android) also closes the drawer if it's open
-================================================================
-          ================================================================
-BACK BUTTON FIX — Prevents app from closing instead of going back
-APPLY TO: ALL HTML pages that the user can navigate between
-  www/studio.html, www/index.html, www/login.html,
-  www/create-quiz.html, www/challenge.html, www/tts.html,
-  www/image-gen.html, www/image-editor.html, www/docs-gen.html
-================================================================
-
-On EACH page, find the closing </body> tag and paste the block
-below JUST BEFORE </body>.
-
-You only need to paste it ONCE per file — do it on every page.
-
-================================================================
-PASTE THIS BLOCK BEFORE </body> ON EVERY PAGE:
-================================================================
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script src="js/aqs-groq-key.js"></script>
+<script src="js/aqs-studio.js"></script>
+<script src="js/aqs-notifs-bar.js"></script>
+<script src="js/aqs-session.js"></script>
 
 <script>
-/* ── Android back button handler for Capacitor + Ionic apps ──
-   Prevents the hardware back button from closing the entire app.
-   Instead it navigates back through history, or on the home page
-   it shows a "tap again to exit" prompt like native apps do.      */
 (function () {
     'use strict';
-
     var lastBackPress = 0;
-    var EXIT_DELAY    = 2000; /* ms — user must press twice within 2s to exit */
-
-    /* ── Determine if this is the "home" page (can't go further back) ── */
-    function isHomePage() {
-        var path = window.location.pathname.toLowerCase();
-        return path.endsWith('index.html') || path === '/' || path.endsWith('/');
-    }
-
-    /* ── Show a brief "Press back again to exit" toast ── */
-    function showExitToast() {
-        var existing = document.getElementById('aqs-exit-toast');
-        if (existing) { existing.style.opacity = '1'; clearTimeout(existing._tid); }
-        else {
-            var toast = document.createElement('div');
-            toast.id = 'aqs-exit-toast';
-            toast.textContent = 'Press back again to exit';
-            toast.style.cssText = [
-                'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
-                'background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px',
-                'border-radius:24px;font-size:0.88rem;z-index:99999',
-                'pointer-events:none;transition:opacity 0.3s'
-            ].join(';');
-            document.body.appendChild(toast);
-            existing = toast;
-        }
-        existing._tid = setTimeout(function () {
-            existing.style.opacity = '0';
-            setTimeout(function () { if (existing.parentNode) existing.parentNode.removeChild(existing); }, 300);
-        }, EXIT_DELAY);
-    }
-
-    /* ── Core back handler ── */
+    var EXIT_DELAY = 2000;
     function handleBack() {
-        /* 1. Close any open modal/drawer/overlay first */
-        var activeModal = document.querySelector('.aqs-modal[style*="flex"], .aqs-modal[style*="block"]');
-        if (activeModal) { activeModal.style.display = 'none'; return; }
-
+        var voiceOverlay = document.getElementById('dts-voice-overlay');
+        if (voiceOverlay && voiceOverlay.style.display !== 'none') { voiceOverlay.style.display = 'none'; return; }
         var historyDrawer = document.getElementById('dts-history-drawer');
         if (historyDrawer && historyDrawer.classList.contains('open')) {
             historyDrawer.classList.remove('open');
@@ -388,69 +301,36 @@ PASTE THIS BLOCK BEFORE </body> ON EVERY PAGE:
             if (ov) ov.classList.remove('open');
             return;
         }
-
-        var sidebar = document.getElementById('aqs-sidebar');
+        var sidebar = document.getElementById('dts-sidebar');
         if (sidebar && sidebar.classList.contains('open')) {
             sidebar.classList.remove('open');
-            var sov = document.getElementById('aqs-sidebar-overlay');
-            if (sov) sov.classList.remove('active');
+            var sov = document.getElementById('dts-overlay');
+            if (sov) sov.style.display = 'none';
             return;
         }
-
-        /* 2. Navigate back in browser history */
-        if (window.history.length > 1 && !isHomePage()) {
-            window.history.back();
-            return;
-        }
-
-        /* 3. On home page — double-press to exit */
+        if (window.history.length > 1) { window.history.back(); return; }
         var now = Date.now();
         if (now - lastBackPress < EXIT_DELAY) {
-            /* Second press — actually exit */
-            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-                window.Capacitor.Plugins.App.exitApp();
-            } else if (window.navigator && window.navigator.app) {
-                window.navigator.app.exitApp();
-            }
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) window.Capacitor.Plugins.App.exitApp();
         } else {
             lastBackPress = now;
-            showExitToast();
+            var toast = document.createElement('div');
+            toast.textContent = 'Press back again to exit';
+            toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px;border-radius:24px;font-size:0.88rem;z-index:99999;pointer-events:none;';
+            document.body.appendChild(toast);
+            setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, EXIT_DELAY);
         }
     }
-
-    /* ── Capacitor back button (recommended for Capacitor apps) ── */
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
-        window.Capacitor.Plugins.App.addListener('backButton', function () {
-            handleBack();
-        });
+        window.Capacitor.Plugins.App.addListener('backButton', handleBack);
     }
-
-    /* ── Ionic back button event ── */
-    document.addEventListener('ionBackButton', function (ev) {
-        ev.detail.register(10, function () { handleBack(); });
-    });
-
-    /* ── Cordova/PhoneGap back button (older builds) ── */
+    document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') handleBack(); });
     document.addEventListener('deviceready', function () {
-        document.addEventListener('backbutton', function (ev) {
-            ev.preventDefault();
-            handleBack();
-        }, false);
+        document.addEventListener('backbutton', function (ev) { ev.preventDefault(); handleBack(); }, false);
     }, false);
-
-    /* ── Browser keyboard Escape key (for desktop testing) ── */
-    document.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape') handleBack();
-    });
 })();
 </script>
 
-================================================================
-SHORTCUT: if you want to apply it once for ALL pages, add it to
-a shared JS file that is already loaded on every page
-(e.g. aqs-pwa.js or aqs-main.js at the very bottom).
-
-Just paste the inner JavaScript (without the <script> tags) at
-the bottom of that shared file.
-================================================================
-
+<script src="js/aqs-backbtn.js"></script>
+</body>
+</html>

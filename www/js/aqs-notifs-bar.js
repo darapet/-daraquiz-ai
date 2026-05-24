@@ -23,7 +23,7 @@
         '#aqs-news-ticker-bar{display:none;overflow:hidden;height:36px;line-height:36px;font-size:.82rem;font-weight:500;position:fixed;bottom:0;left:0;right:0;z-index:9989;border-top:1px solid rgba(255,255,255,.12);pointer-events:none;}',
         '#aqs-news-ticker-bar .aqs-ticker-label{display:inline-flex;align-items:center;height:36px;padding:0 14px;font-weight:700;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;position:relative;z-index:2;pointer-events:none;}',
         '#aqs-ticker-scroll-wrap{overflow:hidden;flex:1;display:inline-block;vertical-align:top;pointer-events:none;}',
-        '#aqs-ticker-track{display:inline-block;white-space:nowrap;padding-left:100%;animation:aqsTickerScroll 90s linear infinite;pointer-events:none;}',
+        '#aqs-ticker-track{display:inline-block;white-space:nowrap;padding-left:100%;animation:aqsTickerScroll 240s linear infinite;pointer-events:none;}',
         '@keyframes aqsTickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}',
 
         /* ── Responsive ── */
@@ -102,8 +102,8 @@
            Capped to prevent the ticker from scrolling too fast.
            Formula gives ~90s for a typical news headline at default speed. */
         var spd = Math.min(parseInt(speed) || 20, 25); /* cap max speed at 25 */
-        var dur = Math.round(track.textContent.length * 18 / Math.max(1, spd));
-        dur = Math.max(60, Math.min(360, dur));  /* min 60 s, max 6 min */
+        var dur = Math.round(track.textContent.length * 45 / Math.max(1, spd));
+        dur = Math.max(180, Math.min(600, dur));  /* min 60 s, max 6 min */
         track.style.animationDuration = dur + 's';
 
         bar.style.display = 'flex';

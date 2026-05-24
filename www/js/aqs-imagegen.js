@@ -304,15 +304,92 @@
         });
     }
 
+
+    /* ══════════════════════════════════════════════════════════════
+       HUGGING FACE IMAGE GENERATION
+       Primary generator — higher quality, no watermarks.
+       Falls back to Pollinations if HF is unavailable or loading.
+    ══════════════════════════════════════════════════════════════ */
+    var HF_MODELS = [
+        'stabilityai/stable-diffusion-xl-base-1.0',
+        'stabilityai/stable-diffusion-2-1',
+        'runwayml/stable-diffusion-v1-5'
+    ];
+
+    async function hfGenerateImage(prompt, width, height, seed) {
+        /* Clamp to dimensions HF models support */
+        var w = Math.min(width  || 1024, 1024);
+        var h = Math.min(height || 1024, 1024);
+        /* Round down to nearest multiple of 64 */
+        w = Math.floor(w / 64) * 64 || 512;
+        h = Math.floor(h / 64) * 64 || 512;
+
+        var hfToken = (window.AQS_ADMIN_SETTINGS && window.AQS_ADMIN_SETTINGS.hf_token) || window.HF_TOKEN || '';
+
+        for (var mi = 0; mi < HF_MODELS.length; mi++) {
+            try {
+                var headers = { 'Content-Type': 'application/json', 'x-use-cache': 'false' };
+                if (hfToken) headers['Authorization'] = 'Bearer ' + hfToken;
+
+                var body = { inputs: prompt };
+                if (HF_MODELS[mi].indexOf('xl') !== -1 || HF_MODELS[mi].indexOf('stable-diffusion-2') !== -1) {
+                    body.parameters = { width: w, height: h, num_inference_steps: 20, guidance_scale: 7 };
+                    if (seed) body.parameters.seed = seed;
+                }
+
+                var ctrl = new AbortController();
+                var tid  = setTimeout(function () { ctrl.abort(); }, 60000);
+
+                var res = await fetch('https://api-inference.huggingface.co/models/' + HF_MODELS[mi], {
+                    method:  'POST',
+                    headers: headers,
+                    signal:  ctrl.signal,
+                    body:    JSON.stringify(body)
+                });
+                clearTimeout(tid);
+
+                if (res.status === 503) {
+                    /* Model still loading — try the next one */
+                    console.warn('[ImageGen] HF model loading:', HF_MODELS[mi]);
+                    continue;
+                }
+                if (!res.ok) continue;
+
+                /* Check content-type to confirm it's image data */
+                var ctype = res.headers.get('content-type') || '';
+                if (ctype.indexOf('image') === -1 && ctype.indexOf('octet') === -1) continue;
+
+                var blob = await res.blob();
+                if (!blob || blob.size < 5000) continue; /* too small = error payload */
+
+                var objectUrl = URL.createObjectURL(blob);
+                return { url: objectUrl, isHF: true, blob: blob };
+            } catch (e) {
+                console.warn('[ImageGen] HF model failed:', HF_MODELS[mi], e.message);
+            }
+        }
+        throw new Error('All Hugging Face models unavailable or still loading');
+    }
+
     var IMG_MODELS = ['flux', 'turbo', 'flux-pro'];
 
     async function raceImage(prompt, width, height, seed, statusCallback) {
+        /* ── Step 1: Try Hugging Face (higher quality, no watermarks) ── */
+        if (statusCallback) statusCallback('Generating via Hugging Face AI… (up to 30 s)');
+        try {
+            var hfResult = await hfGenerateImage(prompt, width, height, seed);
+            return hfResult;
+        } catch (hfErr) {
+            console.warn('[ImageGen] Hugging Face unavailable, switching to Pollinations:', hfErr.message);
+        }
+
+        /* ── Step 2: Pollinations fallback ── */
         var lastErr;
         for (var i = 0; i < IMG_MODELS.length; i++) {
             if (statusCallback) {
                 statusCallback(i === 0
-                    ? 'Generating image… this may take 15–30 seconds'
-                    : 'Retrying with a different server (' + (i + 1) + '/' + IMG_MODELS.length + ')…');
+                    ? 'Trying Pollinations fallback…'
+                    : 'Retrying (' + (i + 1) + '/' + IMG_MODELS.length + ')…');
             }
             if (i > 0) await new Promise(function (r) { setTimeout(r, 2000); });
             try {

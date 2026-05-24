@@ -371,7 +371,7 @@ var AQS_SPLASH={enabled:'1',once:'0',template:'8',app_name:'DaraQuiz AI',tagline
 
 <script src="js/aqs-groq-key.js"></script>
 <script src="js/aqs-session.js"></script>
-    <script src="aqs-pwa.js"></script>
+    <script src="js/aqs-pwa.js"></script>
     ================================================================
 BACK BUTTON FIX — Prevents app from closing instead of going back
 APPLY TO: ALL HTML pages that the user can navigate between
@@ -380,7 +380,8 @@ APPLY TO: ALL HTML pages that the user can navigate between
   www/image-gen.html, www/image-editor.html, www/docs-gen.html
 ================================================================
 
-On EACH page, find the closing </body> tag and paste the block
+On EACH page, find the closing <script src="js/aqs-backbtn.js"></script>
+</body> tag and paste the block
 below JUST BEFORE </body>.
 
 You only need to paste it ONCE per file — do it on every page.
