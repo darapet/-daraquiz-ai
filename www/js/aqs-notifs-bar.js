@@ -1,13 +1,7 @@
 /* ============================================================
    XZILY AI — Shared Notifications Bar (Ticker + Countdown)
-   Auto-injects ticker and countdown HTML on every page.
-   Admin configures via admin panel → saved to Firestore
-   settings/notifications document.
-   Include this script on every page AFTER aqs-firebase.js.
-
-   Layout:
-   - Countdown : position:fixed; TOP of page (banner)
-   - Ticker    : position:fixed; BOTTOM of page (scrolling text footer)
+   v2 — FIXED: ticker uses pointer-events:none so it NEVER
+   blocks clicks on the page content below it.
    ============================================================ */
 (function () {
     'use strict';
@@ -17,18 +11,19 @@
     style.id = 'aqs-notifs-bar-css';
     style.textContent = [
         /* ── COUNTDOWN — top banner ── */
-        '#aqs-countdown-bar{display:none;text-align:center;padding:8px 20px;font-size:.88rem;position:fixed;top:0;left:0;right:0;z-index:9990;border-bottom:1px solid rgba(255,255,255,.15);}',
+        '#aqs-countdown-bar{display:none;text-align:center;padding:8px 20px;font-size:.88rem;position:fixed;top:0;left:0;right:0;z-index:9990;border-bottom:1px solid rgba(255,255,255,.15);pointer-events:none;}',
         '#aqs-countdown-bar .aqs-cd-label{font-weight:700;margin-right:12px;opacity:.9;}',
         '#aqs-countdown-digits{display:inline-flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums;}',
         '.aqs-cd-block{background:rgba(255,255,255,.18);border-radius:6px;padding:3px 9px;font-size:1rem;font-weight:800;min-width:40px;text-align:center;}',
         '.aqs-cd-sep{opacity:.6;font-weight:300;font-size:1rem;}',
 
-        /* ── NEWS TICKER — scrolling bottom footer ── */
-        '#aqs-news-ticker-bar{display:none;overflow:hidden;height:36px;line-height:36px;font-size:.82rem;font-weight:500;position:fixed;bottom:0;left:0;right:0;z-index:9989;border-top:1px solid rgba(255,255,255,.12);}',
-        '#aqs-news-ticker-bar .aqs-ticker-label{display:inline-flex;align-items:center;height:36px;padding:0 14px;font-weight:700;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;position:relative;z-index:2;}',
-        '#aqs-ticker-scroll-wrap{overflow:hidden;flex:1;display:inline-block;vertical-align:top;}',
-        '#aqs-ticker-track{display:inline-block;white-space:nowrap;padding-left:100%;animation:aqsTickerScroll 35s linear infinite;}',
-        '#aqs-ticker-track:hover{animation-play-state:paused;}',
+        /* ── NEWS TICKER — scrolling bottom footer ──
+           pointer-events:none is CRITICAL: it lets all clicks pass through
+           to the page content (chat input, send button, quiz buttons, etc.)  */
+        '#aqs-news-ticker-bar{display:none;overflow:hidden;height:36px;line-height:36px;font-size:.82rem;font-weight:500;position:fixed;bottom:0;left:0;right:0;z-index:9989;border-top:1px solid rgba(255,255,255,.12);pointer-events:none;}',
+        '#aqs-news-ticker-bar .aqs-ticker-label{display:inline-flex;align-items:center;height:36px;padding:0 14px;font-weight:700;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;position:relative;z-index:2;pointer-events:none;}',
+        '#aqs-ticker-scroll-wrap{overflow:hidden;flex:1;display:inline-block;vertical-align:top;pointer-events:none;}',
+        '#aqs-ticker-track{display:inline-block;white-space:nowrap;padding-left:100%;animation:aqsTickerScroll 90s linear infinite;pointer-events:none;}',
         '@keyframes aqsTickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}',
 
         /* ── Responsive ── */
@@ -103,10 +98,12 @@
         var fullText = msgs.join('   ·   ') + '          ';
         track.textContent = fullText + fullText + fullText;
 
-        /* Speed: admin setting (words per minute-ish) → animation duration */
-        var spd = parseInt(speed) || 40;
-        var dur = Math.round(track.textContent.length * 8 / spd);
-        dur = Math.max(10, Math.min(180, dur));
+        /* Speed: admin setting → animation duration
+           Capped to prevent the ticker from scrolling too fast.
+           Formula gives ~90s for a typical news headline at default speed. */
+        var spd = Math.min(parseInt(speed) || 20, 25); /* cap max speed at 25 */
+        var dur = Math.round(track.textContent.length * 18 / Math.max(1, spd));
+        dur = Math.max(60, Math.min(360, dur));  /* min 60 s, max 6 min */
         track.style.animationDuration = dur + 's';
 
         bar.style.display = 'flex';
@@ -123,7 +120,6 @@
         var targetDate = new Date(target);
         if (isNaN(targetDate.getTime()) || targetDate <= new Date()) return;
 
-        /* Apply admin colours */
         bar.style.background = bg    || 'linear-gradient(90deg,#7c3aed,#4f46e5)';
         bar.style.color      = color || '#ffffff';
 
@@ -163,12 +159,9 @@
 
     /* ── Load settings from Firebase ─────────────────────────── */
     function loadNotifSettings() {
-        /* Use the Firestore REST API for public reads — this works for ALL
-           visitors (logged-in or not) without requiring aqsAjax to be ready. */
         _fetchViaRestApi();
     }
 
-    /* ── Firestore REST helper: parses typed field values ── */
     function _parseField(f) {
         if (!f) return undefined;
         if (f.stringValue  !== undefined) return f.stringValue;
@@ -204,7 +197,6 @@
                 }
             })
             .catch(function() {
-                /* Fallback: if REST API fails try aqsAjax (requires Firebase SDK) */
                 if (typeof window.aqsAjax === 'function') {
                     _fetchViaAjax();
                 } else {
@@ -233,8 +225,6 @@
     /* ── Bootstrap ───────────────────────────────────────────── */
     function init() {
         buildBars();
-        /* Use REST API directly — no need to wait for Firebase SDK to be ready.
-           This ensures the ticker appears for ALL visitors, including logged-out ones. */
         loadNotifSettings();
     }
 
