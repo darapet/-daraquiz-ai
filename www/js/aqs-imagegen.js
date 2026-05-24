@@ -1,9 +1,5 @@
 /* AI Quiz System — Image Generator
-<<<<<<< HEAD
    Images:  Hugging Face Inference API (primary — high quality, no watermarks)
-=======
-   Images:  Pollinations AI (no backend required)
->>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
    Text AI: Groq AI (prompt enhancement — fast & reliable)
    Gallery: Firebase Firestore (saved images, cross-device)
    Developed by Omomo Excellence in corporation with Darapet Technology */
@@ -278,28 +274,11 @@
         'extra limbs','duplicate','tiling','ugly','poorly drawn','low res','draft'
     ].join(','));
 
-<<<<<<< HEAD
-=======
-    var _isNative    = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-    var _isMobileWeb = !_isNative && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-    function pollinationsImgUrl(prompt, width, height, seed, model) {
-        var encoded = encodeURIComponent(prompt);
-        var s = seed || Math.floor(Math.random() * 9999999);
-        var m = model || 'flux';
-        return 'https://image.pollinations.ai/prompt/' + encoded +
-               '?width=' + width + '&height=' + height +
-               '&model=' + m + '&seed=' + s + '&nologo=true&private=true&enhance=true' +
-               '&negative=' + NEGATIVE;
-    }
-
->>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     function parseSize(sizeStr) {
         var parts = (sizeStr || '1024x1024').split('x');
         return { w: parseInt(parts[0]) || 1024, h: parseInt(parts[1]) || 1024 };
     }
 
-<<<<<<< HEAD
     /* ══════════════════════════════════════════════════════════════
        HUGGING FACE IMAGE GENERATION
        Primary generator — higher quality, no watermarks.
@@ -310,32 +289,6 @@
         'runwayml/stable-diffusion-v1-5'
     ];
 
-=======
-    function loadImageDirect(prompt, width, height, seed, model) {
-        return new Promise(function (resolve, reject) {
-            var url = pollinationsImgUrl(prompt, width, height, seed, model);
-            var img = new Image();
-            if (!_isNative && !_isMobileWeb) img.crossOrigin = 'anonymous';
-            var tid = setTimeout(function () { img.src = ''; reject(new Error('timeout')); }, 30000);
-            img.onload  = function () { clearTimeout(tid); resolve({ url: url, img: img }); };
-            img.onerror = function () { clearTimeout(tid); reject(new Error('load error')); };
-            img.src = url;
-        });
-    }
-
-
-    /* ══════════════════════════════════════════════════════════════
-       HUGGING FACE IMAGE GENERATION
-       Primary generator — higher quality, no watermarks.
-       Falls back to Pollinations if HF is unavailable or loading.
-    ══════════════════════════════════════════════════════════════ */
-    var HF_MODELS = [
-        'stabilityai/stable-diffusion-xl-base-1.0',
-        'stabilityai/stable-diffusion-2-1',
-        'runwayml/stable-diffusion-v1-5'
-    ];
-
->>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     async function hfGenerateImage(prompt, width, height, seed) {
         /* Clamp to dimensions HF models support */
         var w = Math.min(width  || 1024, 1024);
@@ -391,7 +344,6 @@
         throw new Error('All Hugging Face models unavailable or still loading');
     }
 
-<<<<<<< HEAD
     async function raceImage(prompt, width, height, seed, statusCallback) {
         if (statusCallback) statusCallback('Generating via Hugging Face AI… (up to 60 s)');
         try {
@@ -422,70 +374,6 @@
             console.warn('[ImageGen] Groq callAI failed:', e.message);
             return null;
         }
-=======
-    var IMG_MODELS = ['flux', 'turbo', 'flux-pro'];
-
-    async function raceImage(prompt, width, height, seed, statusCallback) {
-        /* ── Step 1: Try Hugging Face (higher quality, no watermarks) ── */
-        if (statusCallback) statusCallback('Generating via Hugging Face AI… (up to 30 s)');
-        try {
-            var hfResult = await hfGenerateImage(prompt, width, height, seed);
-            return hfResult;
-        } catch (hfErr) {
-            console.warn('[ImageGen] Hugging Face unavailable, switching to Pollinations:', hfErr.message);
-        }
-
-        /* ── Step 2: Pollinations fallback ── */
-        var lastErr;
-        for (var i = 0; i < IMG_MODELS.length; i++) {
-            if (statusCallback) {
-                statusCallback(i === 0
-                    ? 'Trying Pollinations fallback…'
-                    : 'Retrying (' + (i + 1) + '/' + IMG_MODELS.length + ')…');
-            }
-            if (i > 0) await new Promise(function (r) { setTimeout(r, 2000); });
-            try {
-                return await loadImageDirect(prompt, width, height, seed, IMG_MODELS[i]);
-            } catch (e) { lastErr = e; }
-        }
-        throw lastErr || new Error('Image generation failed');
-    }
-
-    /* ─────────────────────────────────────────────────────────────
-       AI TEXT — Groq (fast) with Pollinations fallback
-    ───────────────────────────────────────────────────────────── */
-    async function callAI(messages) {
-        if (typeof window.groqFetch === 'function') {
-            try {
-                var ctrl = new AbortController();
-                var tid  = setTimeout(function () { ctrl.abort(); }, 15000);
-                var res  = await window.groqFetch({
-                    model: 'llama-3.1-8b-instant', messages: messages,
-                    max_tokens: 300, temperature: 0.8
-                }, { signal: ctrl.signal });
-                clearTimeout(tid);
-                if (res.ok) {
-                    var data = await res.json();
-                    var text = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
-                    if (text.trim()) return text.trim();
-                }
-            } catch (e) { console.warn('[ImageGen] Groq failed, using fallback:', e.message); }
-        }
-        try {
-            var ctrl2 = new AbortController();
-            var tid2  = setTimeout(function () { ctrl2.abort(); }, 18000);
-            var res2  = await fetch('https://text.pollinations.ai/openai', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                referrerPolicy: 'no-referrer', signal: ctrl2.signal,
-                body: JSON.stringify({ messages: messages, model: 'openai-fast', max_tokens: 300, temperature: 0.8, private: true })
-            });
-            clearTimeout(tid2);
-            if (!res2.ok) return null;
-            var data2 = await res2.json();
-            var text2 = (data2.choices && data2.choices[0] && data2.choices[0].message && data2.choices[0].message.content) || '';
-            return text2.trim() || null;
-        } catch (e) { return null; }
->>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     }
 
     /* ── Enhance Prompt ── */
