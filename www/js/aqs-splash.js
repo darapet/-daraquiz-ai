@@ -41,7 +41,7 @@
         1: '#ffffff', 2: '#050816', 3: '#4f46e5',
         4: '#0d0d0d', 5: '#f8fafc', 6: '#ffffff',
         7: '#0a0a0a', 8: '#0f172a', 9: '#0a0800',
-        10: '#0c4a6e'
+        10: '#07172e'
     };
     var defaultText = {
         1:'#1e293b',2:'#ffffff',3:'#ffffff',
@@ -59,7 +59,9 @@
 
     /* ── Build logo HTML ── */
     var logoHtml = logoUrl
-        ? '<img src="' + logoUrl + '" alt="' + escH(appName) + '" />'
+        ? '<img src="' + logoUrl + '" alt="' + escH(appName) + '"'
+            + ' style="display:block;width:clamp(88px,22vmin,128px);height:clamp(88px,22vmin,128px);'
+            + 'max-width:128px;max-height:128px;object-fit:cover;border-radius:24px;flex-shrink:0;" />'
         : '<div class="aqs-splash-icon-default">⬡</div>';
 
     /* ── Build orbit rings for template 8 ── */
@@ -92,6 +94,7 @@
             orbitHtml +
             '<div class="aqs-splash-name" data-text="' + escH(appName) + '">' + escH(appName) + '</div>' +
             '<div class="aqs-splash-tagline">' + escH(tagline) + '</div>' +
+            '<div class="aqs-splash-credit">Proudly SEMS</div>' +
             '<div class="aqs-splash-bar-wrap"><div class="aqs-splash-bar-fill"></div></div>' +
         '</div>';
 
@@ -128,7 +131,8 @@
         setTimeout(function () {
             if (node.parentNode) node.parentNode.removeChild(node);
             document.documentElement.style.overflow = '';
-        }, 700);
+            document.documentElement.style.overflowX = '';
+        }, 750);
     }
 
     /* ======================================================

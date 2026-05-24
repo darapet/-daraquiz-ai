@@ -84,6 +84,116 @@
         });
     }
 
+    /* ── Google / Social sign-in button ── */
+    function setupSocialButtons() {
+        var googleBtn = document.getElementById('aqs-google-login');
+        if (!googleBtn) return;
+
+        /* ── LISTEN for redirect result events from aqs-firebase.js ──
+           On mobile, signInWithRedirect brings the user back to login.html.
+           aqs-firebase.js calls checkGoogleRedirectResult() on load and fires
+           these custom events when done. */
+        document.addEventListener('aqs:google:redirectDone', function (ev) {
+            var res = ev.detail || {};
+            showAlert('aqs-login-alert', '✓ Signed in with Google! Redirecting…', false);
+            googleBtn.disabled = false;
+            googleBtn.textContent = 'Continue with Google';
+            var dest = res.redirect || 'user-dashboard.html';
+            setTimeout(function () { window.location.href = dest; }, 900);
+        });
+
+        document.addEventListener('aqs:google:redirectError', function (ev) {
+            var res = ev.detail || {};
+            showAlert('aqs-login-alert', res.message || 'Google sign-in failed. Please try again.', true);
+            googleBtn.disabled = false;
+            googleBtn.textContent = 'Continue with Google';
+        });
+
+        /* ── If a redirect is still in progress (page just reloaded) show loading ── */
+        var redirectPending = false;
+        try { redirectPending = !!sessionStorage.getItem('_aqsGoogleRedirectPending'); } catch (ex) {}
+
+        if (redirectPending) {
+            googleBtn.disabled = true;
+            googleBtn.textContent = '⏳ Completing Google sign-in…';
+            showAlert('aqs-login-alert', 'Completing Google sign-in, please wait…', false);
+
+            /* Safety net — re-enable button after 10 s if events never fire */
+            setTimeout(function () {
+                if (googleBtn.disabled) {
+                    googleBtn.disabled = false;
+                    googleBtn.textContent = 'Continue with Google';
+                    hideAlert('aqs-login-alert');
+                    try { sessionStorage.removeItem('_aqsGoogleRedirectPending'); } catch (ex) {}
+                }
+            }, 10000);
+            return; /* Don't attach the click handler while completing sign-in */
+        }
+
+        /* ── Normal click handler ── */
+        googleBtn.addEventListener('click', function () {
+            hideAlert('aqs-login-alert');
+            googleBtn.disabled = true;
+            googleBtn.textContent = 'Connecting to Google…';
+
+            function doGoogleLogin() {
+                window.aqsAjax(
+                    { action: 'aqs_social_login', provider: 'google' },
+                    function (res) {
+                        /* res.data is null when redirect flow was used on mobile
+                           (page navigated away — this callback won't be reached) */
+                        if (!res) return;
+
+                        if (res.success && res.data && res.data.redirect) {
+                            /* Desktop popup success */
+                            showAlert('aqs-login-alert', '✓ Signed in! Redirecting…', false);
+                            setTimeout(function () { window.location.href = res.data.redirect; }, 800);
+                        } else if (res.success && res.data === null) {
+                            /* Mobile redirect initiated — page will navigate away */
+                            showAlert('aqs-login-alert', 'Redirecting to Google…', false);
+                        } else {
+                            var msg = (res && res.data)
+                                ? (typeof res.data === 'string' ? res.data : (res.data.message || 'Google sign-in failed.'))
+                                : 'Google sign-in failed. Check your connection and try again.';
+                            showAlert('aqs-login-alert', msg, true);
+                            googleBtn.disabled = false;
+                            googleBtn.textContent = 'Continue with Google';
+                        }
+                    },
+                    function (err) {
+                        var msg = (err && err.message) || 'Google sign-in failed. Please try again.';
+                        /* Show helpful hint if it's a domain auth error */
+                        if (msg.indexOf('unauthorized-domain') !== -1 || msg.indexOf('not authorized') !== -1) {
+                            msg = 'Sign-in blocked: this site is not yet authorised in Firebase Console. Ask the admin to add darapet.github.io to the Authorized Domains list.';
+                        }
+                        showAlert('aqs-login-alert', msg, true);
+                        googleBtn.disabled = false;
+                        googleBtn.textContent = 'Continue with Google';
+                    }
+                );
+            }
+
+            if (typeof window.aqsAjax === 'function') {
+                doGoogleLogin();
+            } else {
+                /* Firebase module still loading — wait for ready event */
+                var done = false;
+                document.addEventListener('aqs:firebase:ready', function onReady() {
+                    document.removeEventListener('aqs:firebase:ready', onReady);
+                    if (!done) { done = true; doGoogleLogin(); }
+                });
+                setTimeout(function () {
+                    if (!done && typeof window.aqsAjax !== 'function') {
+                        done = true;
+                        showAlert('aqs-login-alert', 'Firebase is still loading. Please wait a moment and try again.', true);
+                        googleBtn.disabled = false;
+                        googleBtn.textContent = 'Continue with Google';
+                    }
+                }, 6000);
+            }
+        });
+    }
+
     /* ── login form ── */
     function setupLoginForm() {
         var form = document.getElementById('aqs-login-form');
@@ -212,7 +322,6 @@
         var badge   = document.getElementById('aqs-user-role-badge');
         if (!nameEl) return;
 
-        /* Wait for Firebase auth to resolve */
         document.addEventListener('aqs:authchange', function (ev) {
             var user = ev.detail && ev.detail.user;
             if (!user) return;
@@ -230,6 +339,7 @@
         setupPasswordToggles();
         setupPasswordStrength();
         setupRoleChips();
+        setupSocialButtons();
         setupLoginForm();
         setupRegisterForm();
         setupLogoutBtns();

@@ -280,6 +280,21 @@
 
     async function callGroqDirect(prompt) {
         if (typeof window.groqFetch !== 'function') return null;
+
+        /* Wait up to 4 s for Firestore to populate the master Groq keys.
+           On Android the app opens before the async settings fetch completes,
+           so without this wait the key array is still empty and Groq is skipped. */
+        if (!window._AQS_GROQ_MASTER_KEYS || !window._AQS_GROQ_MASTER_KEYS.length) {
+            var waited = 0;
+            while (waited < 4000) {
+                await new Promise(function(r) { setTimeout(r, 400); });
+                waited += 400;
+                if (window._AQS_GROQ_MASTER_KEYS && window._AQS_GROQ_MASTER_KEYS.length) break;
+            }
+        }
+        /* If still no keys after waiting, skip Groq */
+        if (!window._AQS_GROQ_MASTER_KEYS || !window._AQS_GROQ_MASTER_KEYS.length) return null;
+
         var isMath = isMathPrompt(prompt);
         var groqModel  = isMath ? 'llama-3.3-70b-versatile' : 'llama-3.1-8b-instant';
         var groqTokens = isMath ? 6144 : 4096;
@@ -313,46 +328,32 @@
         return null;
     }
 
-    /* ── AI: Pollinations race ───────────────────────────────── */
+    /* ── AI: Groq direct (replaces Pollinations) ─────────────── */
     async function callAIDirect(prompt) {
-        var MODELS = ['openai-fast', 'openai', 'mistral', 'deepseek'];
-        setStatus('Generating questions...');
-        var controllers = MODELS.map(function() { return new AbortController(); });
-
-        var modelPromises = MODELS.map(function(model, idx) {
-            var tid = setTimeout(function() { controllers[idx].abort(); }, 20000);
-            return fetch('https://text.pollinations.ai/openai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: controllers[idx].signal,
-                body: JSON.stringify({
-                    model: model, seed: Math.floor(Math.random() * 99999), temperature: 0.4, private: true,
-                    messages: [
-                        { role: 'system', content: 'You are an expert quiz maker. Output ONLY raw valid JSON. No markdown, no code fences.' },
-                        { role: 'user',   content: prompt }
-                    ]
-                })
-            })
-            .then(function(resp) { clearTimeout(tid); if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json(); })
-            .then(function(data) {
+        if (typeof window.groqFetch !== 'function') throw new Error('Groq not configured. Add your API keys to js/aqs-groq-key.js');
+        setStatus('Generating questions via Groq AI…');
+        var GROQ_MODELS = ['llama-3.3-70b-versatile', 'llama-3.1-70b-versatile', 'llama-3.1-8b-instant'];
+        var messages = [
+            { role: 'system', content: 'You are an expert quiz maker. Output ONLY raw valid JSON. No markdown, no code fences.' },
+            { role: 'user',   content: prompt }
+        ];
+        for (var mi = 0; mi < GROQ_MODELS.length; mi++) {
+            try {
+                var ctrl = new AbortController();
+                var tid  = setTimeout(function() { ctrl.abort(); }, 30000);
+                var res  = await window.groqFetch(
+                    { model: GROQ_MODELS[mi], messages: messages, temperature: 0.4, max_tokens: 4096 },
+                    { signal: ctrl.signal }
+                );
+                clearTimeout(tid);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                var data = await res.json();
                 var text = ((((data.choices || [])[0] || {}).message) || {}).content || '';
                 text = text.trim();
-                if (!text || text.length < 20) throw new Error('Empty');
-                controllers.forEach(function(c) { try { c.abort(); } catch(e2) {} });
-                return text;
-            })
-            .catch(function(e) { clearTimeout(tid); return null; });
-        });
-
-        return new Promise(function(resolve, reject) {
-            var remaining = modelPromises.length;
-            modelPromises.forEach(function(p) {
-                p.then(function(val) {
-                    if (val !== null) { resolve(val); }
-                    else { remaining--; if (remaining === 0) reject(new Error('All AI models failed. Please check your internet and try again.')); }
-                });
-            });
-        });
+                if (text && text.length > 20) return text;
+            } catch(e) { /* try next model */ }
+        }
+        throw new Error('Groq AI failed. Check your API keys in js/aqs-groq-key.js and try again.');
     }
 
     /* ── AI: proxy → direct fallback ────────────────────────── */
@@ -436,23 +437,16 @@
         }
 
         /* Generation order:
-           1. Groq direct from browser (fast, best quality — only if key is configured)
-           2. Pollinations direct from browser (free, NO API key needed — always works)
-           3. Server proxy as last resort (slow if server is sleeping on free tier)       */
+           1. Groq direct from browser (fast, best quality)
+           2. Groq fallback using callAIDirect (tries multiple Groq models)            */
         var rawText = null;
 
-        /* 1. Groq direct (skipped automatically if no key configured) */
+        /* 1. Groq direct — primary */
         rawText = await callGroqDirect(prompt);
 
-        /* 2. Pollinations direct — free, no key, works immediately from browser */
+        /* 2. Groq fallback — tries multiple models if first attempt failed */
         if (!rawText) {
-            setStatus('Generating questions via AI (free)…');
             try { rawText = await callAIDirect(prompt); } catch(_) { rawText = null; }
-        }
-
-        /* 3. Server proxy last resort */
-        if (!rawText) {
-            try { rawText = await callAI(prompt); } catch(_aiErr) { rawText = null; }
         }
 
         if (!rawText) throw new Error('All AI sources failed. Please check your internet connection and try again.');

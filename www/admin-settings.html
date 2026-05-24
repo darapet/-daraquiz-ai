@@ -113,9 +113,9 @@ window.addEventListener('DOMContentLoaded', function() {
             var s = (res && res.success && res.data && res.data.settings) ? res.data.settings : {};
             var setVal = function(id, val){ var el=document.getElementById(id); if(el && val!==undefined && val!==null) el.value=val; };
             var setChk = function(id, val){ var el=document.getElementById(id); if(el) el.checked=!!val; };
-            /* Load up to 5 Groq keys — support both new array and legacy single-key */
+            /* Load up to 10 Groq keys — support both new array and legacy single-key */
             var gkeys = Array.isArray(s.groq_keys) ? s.groq_keys : (s.groq_api_key ? [s.groq_api_key] : []);
-            for (var gi = 1; gi <= 5; gi++) { setVal('aqs-groq-key-' + gi, gkeys[gi-1] || ''); }
+            for (var gi = 1; gi <= 10; gi++) { setVal('aqs-groq-key-' + gi, gkeys[gi-1] || ''); }
             setVal('aqs-groq-model', s.groq_model);
             setVal('aqs-music-url', s.bg_music_url);
             setChk('aqs-splash-enabled', s.splash_enabled);
@@ -185,7 +185,7 @@ window.addEventListener('DOMContentLoaded', function() {
         <span class="aqs-settings-card-icon">🤖</span>
         <div>
             <h2 class="aqs-settings-card-title">AI Provider (Groq)</h2>
-            <p class="aqs-settings-card-desc">Add up to 5 Groq API keys — they rotate automatically to spread load and avoid rate limits. Keys are stored securely in Firestore, never in your code. Get free keys at <a href="https://console.groq.com" target="_blank">console.groq.com</a>.</p>
+            <p class="aqs-settings-card-desc">Add up to 10 Groq API keys — they rotate automatically to spread load and avoid rate limits. Keys are stored securely in Firestore, never in your code. Get free keys at <a href="https://console.groq.com" target="_blank">console.groq.com</a>.</p>
         </div>
     </div>
     <div class="aqs-settings-card-body">
@@ -209,6 +209,26 @@ window.addEventListener('DOMContentLoaded', function() {
             <div class="aqs-field-group">
                 <label for="aqs-groq-key-5">Groq API Key 5</label>
                 <input type="password" id="aqs-groq-key-5" placeholder="gsk_… (optional)" autocomplete="off" />
+            </div>
+            <div class="aqs-field-group">
+                <label for="aqs-groq-key-6">Groq API Key 6</label>
+                <input type="password" id="aqs-groq-key-6" placeholder="gsk_… (optional)" autocomplete="off" />
+            </div>
+            <div class="aqs-field-group">
+                <label for="aqs-groq-key-7">Groq API Key 7</label>
+                <input type="password" id="aqs-groq-key-7" placeholder="gsk_… (optional)" autocomplete="off" />
+            </div>
+            <div class="aqs-field-group">
+                <label for="aqs-groq-key-8">Groq API Key 8</label>
+                <input type="password" id="aqs-groq-key-8" placeholder="gsk_… (optional)" autocomplete="off" />
+            </div>
+            <div class="aqs-field-group">
+                <label for="aqs-groq-key-9">Groq API Key 9</label>
+                <input type="password" id="aqs-groq-key-9" placeholder="gsk_… (optional)" autocomplete="off" />
+            </div>
+            <div class="aqs-field-group">
+                <label for="aqs-groq-key-10">Groq API Key 10</label>
+                <input type="password" id="aqs-groq-key-10" placeholder="gsk_… (optional)" autocomplete="off" />
             </div>
             <div class="aqs-field-group">
                 <label for="aqs-groq-model">Default Model</label>
@@ -576,7 +596,7 @@ function btn(id){ return document.getElementById(id); }
 
 btn('aqs-save-ai-btn').addEventListener('click', function(){
     var keys = [];
-    for (var gi = 1; gi <= 5; gi++) {
+    for (var gi = 1; gi <= 10; gi++) {
         var el = document.getElementById('aqs-groq-key-' + gi);
         if (el && el.value.trim()) keys.push(el.value.trim());
     }
@@ -588,7 +608,7 @@ btn('aqs-save-ai-btn').addEventListener('click', function(){
 
 btn('aqs-test-ai-btn').addEventListener('click', async function(){
     var keys = [];
-    for (var gi = 1; gi <= 5; gi++) {
+    for (var gi = 1; gi <= 10; gi++) {
         var el = document.getElementById('aqs-groq-key-' + gi);
         if (el && el.value.trim()) keys.push({ slot: gi, key: el.value.trim() });
     }
@@ -784,5 +804,142 @@ btn('aqs-save-oauth-btn').addEventListener('click', function(){
     }, 'aqs-oauth-status', this, '💾 Save OAuth Settings');
 });
 </script>
+  ================================================================
+BACK BUTTON FIX — Prevents app from closing instead of going back
+APPLY TO: ALL HTML pages that the user can navigate between
+  www/studio.html, www/index.html, www/login.html,
+  www/create-quiz.html, www/challenge.html, www/tts.html,
+  www/image-gen.html, www/image-editor.html, www/docs-gen.html
+================================================================
+
+On EACH page, find the closing <script src="js/aqs-backbtn.js"></script>
+</body> tag and paste the block
+below JUST BEFORE </body>.
+
+You only need to paste it ONCE per file — do it on every page.
+
+================================================================
+PASTE THIS BLOCK BEFORE </body> ON EVERY PAGE:
+================================================================
+
+<script>
+/* ── Android back button handler for Capacitor + Ionic apps ──
+   Prevents the hardware back button from closing the entire app.
+   Instead it navigates back through history, or on the home page
+   it shows a "tap again to exit" prompt like native apps do.      */
+(function () {
+    'use strict';
+
+    var lastBackPress = 0;
+    var EXIT_DELAY    = 2000; /* ms — user must press twice within 2s to exit */
+
+    /* ── Determine if this is the "home" page (can't go further back) ── */
+    function isHomePage() {
+        var path = window.location.pathname.toLowerCase();
+        return path.endsWith('index.html') || path === '/' || path.endsWith('/');
+    }
+
+    /* ── Show a brief "Press back again to exit" toast ── */
+    function showExitToast() {
+        var existing = document.getElementById('aqs-exit-toast');
+        if (existing) { existing.style.opacity = '1'; clearTimeout(existing._tid); }
+        else {
+            var toast = document.createElement('div');
+            toast.id = 'aqs-exit-toast';
+            toast.textContent = 'Press back again to exit';
+            toast.style.cssText = [
+                'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
+                'background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px',
+                'border-radius:24px;font-size:0.88rem;z-index:99999',
+                'pointer-events:none;transition:opacity 0.3s'
+            ].join(';');
+            document.body.appendChild(toast);
+            existing = toast;
+        }
+        existing._tid = setTimeout(function () {
+            existing.style.opacity = '0';
+            setTimeout(function () { if (existing.parentNode) existing.parentNode.removeChild(existing); }, 300);
+        }, EXIT_DELAY);
+    }
+
+    /* ── Core back handler ── */
+    function handleBack() {
+        /* 1. Close any open modal/drawer/overlay first */
+        var activeModal = document.querySelector('.aqs-modal[style*="flex"], .aqs-modal[style*="block"]');
+        if (activeModal) { activeModal.style.display = 'none'; return; }
+
+        var historyDrawer = document.getElementById('dts-history-drawer');
+        if (historyDrawer && historyDrawer.classList.contains('open')) {
+            historyDrawer.classList.remove('open');
+            var ov = document.getElementById('dts-history-overlay');
+            if (ov) ov.classList.remove('open');
+            return;
+        }
+
+        var sidebar = document.getElementById('aqs-sidebar');
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            var sov = document.getElementById('aqs-sidebar-overlay');
+            if (sov) sov.classList.remove('active');
+            return;
+        }
+
+        /* 2. Navigate back in browser history */
+        if (window.history.length > 1 && !isHomePage()) {
+            window.history.back();
+            return;
+        }
+
+        /* 3. On home page — double-press to exit */
+        var now = Date.now();
+        if (now - lastBackPress < EXIT_DELAY) {
+            /* Second press — actually exit */
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                window.Capacitor.Plugins.App.exitApp();
+            } else if (window.navigator && window.navigator.app) {
+                window.navigator.app.exitApp();
+            }
+        } else {
+            lastBackPress = now;
+            showExitToast();
+        }
+    }
+
+    /* ── Capacitor back button (recommended for Capacitor apps) ── */
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+        window.Capacitor.Plugins.App.addListener('backButton', function () {
+            handleBack();
+        });
+    }
+
+    /* ── Ionic back button event ── */
+    document.addEventListener('ionBackButton', function (ev) {
+        ev.detail.register(10, function () { handleBack(); });
+    });
+
+    /* ── Cordova/PhoneGap back button (older builds) ── */
+    document.addEventListener('deviceready', function () {
+        document.addEventListener('backbutton', function (ev) {
+            ev.preventDefault();
+            handleBack();
+        }, false);
+    }, false);
+
+    /* ── Browser keyboard Escape key (for desktop testing) ── */
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') handleBack();
+    });
+})();
+</script>
+
+================================================================
+SHORTCUT: if you want to apply it once for ALL pages, add it to
+a shared JS file that is already loaded on every page
+(e.g. aqs-pwa.js or aqs-main.js at the very bottom).
+
+Just paste the inner JavaScript (without the <script> tags) at
+the bottom of that shared file.
+================================================================
+
 </body>
 </html>

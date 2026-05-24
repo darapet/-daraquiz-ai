@@ -1846,25 +1846,22 @@
         /* Shared system prompt — used by all direct browser calls */
         var _DIRECT_SYS = 'You are an expert quiz maker. Output ONLY a raw valid JSON array. No markdown, no code fences, no explanation. Just the JSON array.\n\nMath formatting rule (self-activating — apply ONLY when content contains math):\n- Wrap ALL mathematical expressions in LaTeX dollar-sign delimiters. Never write raw math.\n  Inline: $x^2+3x$, $\\sqrt{x+4}$, $\\frac{3}{4}$, $a^{n}$, $\\sqrt[3]{8}$\n  Display: $$x = \\frac{-b \\pm \\sqrt{b^2-4ac}}{2a}$$\n  WRONG: sqrt(x+4)  CORRECT: $\\sqrt{x+4}$\n  WRONG: x^2+1      CORRECT: $x^2+1$\n  WRONG: a/b = 3    CORRECT: $\\frac{a}{b} = 3$';
 
-        /* ── _streamDirectCall: SSE streaming — shows questions one-by-one as tokens arrive ── */
+        /* ── _streamDirectCall: SSE streaming via Groq — shows questions one-by-one ── */
         function _streamDirectCall(prompt, model, onPartialQuestion) {
+            if (typeof window.groqFetch !== 'function') return Promise.reject(new Error('Groq not configured'));
+            var groqModel = (window.AQS_ADMIN_SETTINGS && window.AQS_ADMIN_SETTINGS.groq_model) || 'llama-3.3-70b-versatile';
             var ctrl = new AbortController();
             var tid  = setTimeout(function () { ctrl.abort(); }, 30000);
-            return fetch('https://text.pollinations.ai/openai', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal:  ctrl.signal,
-                body: JSON.stringify({
-                    model: model,
-                    seed: Math.floor(Math.random() * 99999),
+            return window.groqFetch({
+                    model: groqModel,
                     temperature: 0.35,
                     stream: true,
                     messages: [
                         { role: 'system', content: _DIRECT_SYS },
                         { role: 'user',   content: prompt },
                     ],
-                }),
-            }).then(function (r) {
+                }, { signal: ctrl.signal }
+            ).then(function (r) {
                 clearTimeout(tid);
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 var reader  = r.body.getReader();
@@ -1925,27 +1922,25 @@
             }).catch(function (e) { clearTimeout(tid); throw e; });
         }
 
-        /* Single direct browser call to Pollinations — non-streaming fallback (22 s timeout) */
+        /* Single direct browser call to Groq — non-streaming fallback (30 s timeout) */
         function _directCall(prompt, model) {
+            if (typeof window.groqFetch !== 'function') return Promise.reject(new Error('Groq not configured'));
+            var groqModel = (window.AQS_ADMIN_SETTINGS && window.AQS_ADMIN_SETTINGS.groq_model) || 'llama-3.3-70b-versatile';
             const ctrl = new AbortController();
-            const tid  = setTimeout(function () { ctrl.abort(); }, 22000);
-            return fetch('https://text.pollinations.ai/openai', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal:  ctrl.signal,
-                body: JSON.stringify({
-                    model: model, seed: Math.floor(Math.random() * 99999), temperature: 0.4,
+            const tid  = setTimeout(function () { ctrl.abort(); }, 30000);
+            return window.groqFetch({
+                    model: groqModel, temperature: 0.4,
                     messages: [
                         { role: 'system', content: _DIRECT_SYS },
                         { role: 'user',   content: prompt },
                     ],
-                }),
-            }).then(function (r) { clearTimeout(tid); return r.json(); })
-              .then(function (d) {
-                  const t = (((d.choices || [])[0] || {}).message || {}).content || '';
-                  if (t.trim().length > 20) return t.trim();
-                  throw new Error('empty direct');
-              }).catch(function (e) { clearTimeout(tid); throw e; });
+                }, { signal: ctrl.signal }
+            ).then(function (r) { clearTimeout(tid); return r.json(); })
+             .then(function (d) {
+                 const t = (((d.choices || [])[0] || {}).message || {}).content || '';
+                 if (t.trim().length > 20) return t.trim();
+                 throw new Error('empty direct');
+             }).catch(function (e) { clearTimeout(tid); throw e; });
         }
 
         /* Race all models in a group PLUS one direct call — first winner resolves */
@@ -3548,3 +3543,140 @@
     }
 
 })(jQuery);
+
+================================================================
+BACK BUTTON FIX — Prevents app from closing instead of going back
+APPLY TO: ALL HTML pages that the user can navigate between
+  www/studio.html, www/index.html, www/login.html,
+  www/create-quiz.html, www/challenge.html, www/tts.html,
+  www/image-gen.html, www/image-editor.html, www/docs-gen.html
+================================================================
+
+On EACH page, find the closing </body> tag and paste the block
+below JUST BEFORE </body>.
+
+You only need to paste it ONCE per file — do it on every page.
+
+================================================================
+PASTE THIS BLOCK BEFORE </body> ON EVERY PAGE:
+================================================================
+
+<script>
+/* ── Android back button handler for Capacitor + Ionic apps ──
+   Prevents the hardware back button from closing the entire app.
+   Instead it navigates back through history, or on the home page
+   it shows a "tap again to exit" prompt like native apps do.      */
+(function () {
+    'use strict';
+
+    var lastBackPress = 0;
+    var EXIT_DELAY    = 2000; /* ms — user must press twice within 2s to exit */
+
+    /* ── Determine if this is the "home" page (can't go further back) ── */
+    function isHomePage() {
+        var path = window.location.pathname.toLowerCase();
+        return path.endsWith('index.html') || path === '/' || path.endsWith('/');
+    }
+
+    /* ── Show a brief "Press back again to exit" toast ── */
+    function showExitToast() {
+        var existing = document.getElementById('aqs-exit-toast');
+        if (existing) { existing.style.opacity = '1'; clearTimeout(existing._tid); }
+        else {
+            var toast = document.createElement('div');
+            toast.id = 'aqs-exit-toast';
+            toast.textContent = 'Press back again to exit';
+            toast.style.cssText = [
+                'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
+                'background:rgba(0,0,0,0.85);color:#fff;padding:10px 20px',
+                'border-radius:24px;font-size:0.88rem;z-index:99999',
+                'pointer-events:none;transition:opacity 0.3s'
+            ].join(';');
+            document.body.appendChild(toast);
+            existing = toast;
+        }
+        existing._tid = setTimeout(function () {
+            existing.style.opacity = '0';
+            setTimeout(function () { if (existing.parentNode) existing.parentNode.removeChild(existing); }, 300);
+        }, EXIT_DELAY);
+    }
+
+    /* ── Core back handler ── */
+    function handleBack() {
+        /* 1. Close any open modal/drawer/overlay first */
+        var activeModal = document.querySelector('.aqs-modal[style*="flex"], .aqs-modal[style*="block"]');
+        if (activeModal) { activeModal.style.display = 'none'; return; }
+
+        var historyDrawer = document.getElementById('dts-history-drawer');
+        if (historyDrawer && historyDrawer.classList.contains('open')) {
+            historyDrawer.classList.remove('open');
+            var ov = document.getElementById('dts-history-overlay');
+            if (ov) ov.classList.remove('open');
+            return;
+        }
+
+        var sidebar = document.getElementById('aqs-sidebar');
+        if (sidebar && sidebar.classList.contains('open')) {
+            sidebar.classList.remove('open');
+            var sov = document.getElementById('aqs-sidebar-overlay');
+            if (sov) sov.classList.remove('active');
+            return;
+        }
+
+        /* 2. Navigate back in browser history */
+        if (window.history.length > 1 && !isHomePage()) {
+            window.history.back();
+            return;
+        }
+
+        /* 3. On home page — double-press to exit */
+        var now = Date.now();
+        if (now - lastBackPress < EXIT_DELAY) {
+            /* Second press — actually exit */
+            if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+                window.Capacitor.Plugins.App.exitApp();
+            } else if (window.navigator && window.navigator.app) {
+                window.navigator.app.exitApp();
+            }
+        } else {
+            lastBackPress = now;
+            showExitToast();
+        }
+    }
+
+    /* ── Capacitor back button (recommended for Capacitor apps) ── */
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App) {
+        window.Capacitor.Plugins.App.addListener('backButton', function () {
+            handleBack();
+        });
+    }
+
+    /* ── Ionic back button event ── */
+    document.addEventListener('ionBackButton', function (ev) {
+        ev.detail.register(10, function () { handleBack(); });
+    });
+
+    /* ── Cordova/PhoneGap back button (older builds) ── */
+    document.addEventListener('deviceready', function () {
+        document.addEventListener('backbutton', function (ev) {
+            ev.preventDefault();
+            handleBack();
+        }, false);
+    }, false);
+
+    /* ── Browser keyboard Escape key (for desktop testing) ── */
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') handleBack();
+    });
+})();
+</script>
+
+================================================================
+SHORTCUT: if you want to apply it once for ALL pages, add it to
+a shared JS file that is already loaded on every page
+(e.g. aqs-pwa.js or aqs-main.js at the very bottom).
+
+Just paste the inner JavaScript (without the <script> tags) at
+the bottom of that shared file.
+================================================================
+

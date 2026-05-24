@@ -52,17 +52,21 @@
 <main class="aqs-page-main">
 
 <div class="tts-main">
-    <!-- WebView notice -->
-    <div id="aqs-webview-notice" style="display:none;margin:16px 32px 0;padding:16px 20px;background:#fef3c7;border:2px solid #f59e0b;border-radius:12px;align-items:flex-start;gap:14px;">
-        <span style="font-size:1.6rem;flex-shrink:0;">⚠️</span>
-        <div>
-            <div style="font-size:0.95rem;font-weight:700;color:#92400e;margin-bottom:4px;">Text to Speech — Web Browser Required</div>
-            <div style="font-size:0.85rem;color:#78350f;line-height:1.6;">Audio playback is <strong>not available inside app webviews</strong>. Please open in a browser.</div>
-        </div>
-    </div>
-    <script>
-    (function(){var ua=navigator.userAgent||'';var isWebView=/Median|gonative/i.test(ua)||(/Android/i.test(ua)&&/wv\b/i.test(ua))||(/iPhone|iPad/i.test(ua)&&!/Safari/i.test(ua)&&/AppleWebKit/i.test(ua));if(isWebView){var n=document.getElementById('aqs-webview-notice');if(n)n.style.display='flex';}})();
-    </script>
+    <!-- Mobile/WebView notice -->
+      <div id="aqs-mobile-notice" style="display:none;margin:16px 16px 0;padding:14px 18px;background:linear-gradient(135deg,#fef3c7,#fff7ed);border:2px solid #f59e0b;border-radius:14px;flex-direction:column;gap:8px;box-shadow:0 2px 12px rgba(245,158,11,0.15);">
+          <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.5rem;flex-shrink:0;">⚠️</span>
+              <div style="font-size:0.92rem;font-weight:700;color:#92400e;">Text to Speech — Best on Web Browser</div>
+          </div>
+          <div style="font-size:0.84rem;color:#78350f;line-height:1.65;padding-left:2px;">
+              Audio playback may not work correctly on the mobile app. For the best experience, open our website in your browser:<br>
+              <a href="https://darapet.github.io/smartquiz-system/tts.html" style="color:#b45309;font-weight:700;word-break:break-all;text-decoration:underline;">https://darapet.github.io/smartquiz-system/</a>
+          </div>
+          <button onclick="document.getElementById('aqs-mobile-notice').style.display='none'" style="align-self:flex-end;background:none;border:1px solid #f59e0b;border-radius:6px;color:#92400e;font-size:0.78rem;font-weight:600;padding:4px 12px;cursor:pointer;">Dismiss</button>
+      </div>
+      <script>
+      (function(){var ua=navigator.userAgent||'';var isMobile=/Android|iPhone|iPad|iPod/i.test(ua);if(isMobile){var n=document.getElementById('aqs-mobile-notice');if(n)n.style.display='flex';}})();
+      </script>
 
     <!-- Hero -->
     <div class="tts-hero">
@@ -213,5 +217,6 @@ var AQS_TTS_CONFIG = {
 <script src="js/aqs-groq-key.js"></script>
 <script src="js/aqs-notifs-bar.js"></script>
 <script src="js/aqs-session.js"></script>
+<script src="js/aqs-backbtn.js"></script>
 </body>
 </html>

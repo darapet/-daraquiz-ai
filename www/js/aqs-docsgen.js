@@ -214,7 +214,7 @@
         });
     }
 
-    /* OCR a base64 data URL using Groq vision → Pollinations vision fallback */
+    /* OCR a base64 data URL using Groq vision */
     async function ocrWithVision(dataUrl) {
         var visionMsg = [{
             role: 'user',
@@ -224,64 +224,42 @@
             ]
         }];
 
-        /* Try Groq vision first (meta-llama/llama-4-scout supports vision) */
+        /* Try Groq vision models */
+        var VISION_MODELS = ['meta-llama/llama-4-scout-17b-16e-instruct', 'llava-v1.5-7b-4096-preview'];
         if (typeof window.groqFetch === 'function') {
-            try {
-                var ctrl = new AbortController();
-                setTimeout(function () { ctrl.abort(); }, 30000);
-                var res = await window.groqFetch({
-                    model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-                    messages: visionMsg,
-                    max_tokens: 4096,
-                    temperature: 0.1
-                }, { signal: ctrl.signal });
-                if (res.ok) {
-                    var d = await res.json();
-                    var t = (((d.choices || [])[0] || {}).message || {}).content || '';
-                    if (t.trim().length > 5) return t.trim();
-                }
-            } catch (_) {}
-        }
-
-        /* Pollinations vision fallback — free, no key */
-        try {
-            var ctrl2 = new AbortController();
-            setTimeout(function () { ctrl2.abort(); }, 35000);
-            var res2 = await fetch('https://text.pollinations.ai/openai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal: ctrl2.signal,
-                body: JSON.stringify({
-                    model: 'openai',
-                    messages: visionMsg,
-                    max_tokens: 2000,
-                    temperature: 0.1,
-                    private: true
-                })
-            });
-            if (res2.ok) {
-                var d2 = await res2.json();
-                var t2 = (((d2.choices || [])[0] || {}).message || {}).content || '';
-                if (t2.trim().length > 5) return t2.trim();
+            for (var vi = 0; vi < VISION_MODELS.length; vi++) {
+                try {
+                    var ctrl = new AbortController();
+                    setTimeout(function () { ctrl.abort(); }, 30000);
+                    var res = await window.groqFetch({
+                        model: VISION_MODELS[vi],
+                        messages: visionMsg,
+                        max_tokens: 4096,
+                        temperature: 0.1
+                    }, { signal: ctrl.signal });
+                    if (res.ok) {
+                        var d = await res.json();
+                        var t = (((d.choices || [])[0] || {}).message || {}).content || '';
+                        if (t.trim().length > 5) return t.trim();
+                    }
+                } catch (_) {}
             }
-        } catch (_) {}
+        }
 
         return null;
     }
 
     /* ─────────────────────────────────────────────────────────────
-       AI CALL — sequential: Groq first → Pollinations → proxy
+       AI CALL — Groq direct (no Pollinations)
     ───────────────────────────────────────────────────────────── */
     function callDirect(messages) {
+        if (typeof window.groqFetch !== 'function') return Promise.reject(new Error('Groq not configured'));
         var ctrl = new AbortController();
         var tid  = setTimeout(function () { ctrl.abort(); }, 35000);
-        return fetch('https://text.pollinations.ai/openai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            referrerPolicy: 'no-referrer',
-            signal: ctrl.signal,
-            body: JSON.stringify({ messages: messages, model: 'openai', max_tokens: 2000, temperature: 0.5, private: true })
-        })
+        return window.groqFetch(
+            { model: 'llama-3.1-8b-instant', messages: messages, max_tokens: 2000, temperature: 0.5 },
+            { signal: ctrl.signal }
+        )
         .then(function (r) { clearTimeout(tid); return r.json(); })
         .then(function (d) {
             var t = (((d.choices || [])[0] || {}).message || {}).content || '';
@@ -326,7 +304,7 @@
         .catch(function (e) { clearTimeout(tid); throw e; });
     }
 
-    /* Sequential: Groq first → Pollinations direct → proxy last resort */
+    /* Sequential: Groq first → Groq fallback (no Pollinations, no proxy) */
     async function raceAI(messages) {
         /* 1. Groq direct — fastest & best quality (groqFetch handles key rotation) */
         try {
@@ -336,16 +314,10 @@
             }
         } catch(e) {}
 
-        /* 2. Pollinations direct — free, no key, browser-direct */
+        /* 2. Groq fallback via callDirect (tries different model) */
         try {
             var pt = await callDirect(messages);
             if (pt) return pt;
-        } catch(e) {}
-
-        /* 3. Server proxy — last resort */
-        try {
-            var st = await callProxy(messages);
-            if (st) return st;
         } catch(e) {}
 
         throw new Error('All AI connections failed. Check your internet and try again.');

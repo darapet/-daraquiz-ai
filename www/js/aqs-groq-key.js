@@ -3,11 +3,36 @@
     var STORAGE_KEY = 'aqs_groq_key';
     var IDX_KEY     = 'aqs_groq_key_idx';
 
-    /* Master keys are loaded at runtime from Firestore (via aqs-firebase.js).
-       They are NEVER hardcoded here so the file is safe to push to GitHub.
-       window._AQS_GROQ_MASTER_KEYS is set by aqs-firebase.js after it loads
-       the site settings. Until that happens the array is empty and the site
-       will use any personally-saved browser key instead. */
+    /* ══════════════════════════════════════════════════════════════
+       PASTE YOUR GROQ API KEYS BELOW (up to 10).
+       Get free keys at https://console.groq.com
+       They rotate automatically — when one hits rate limit, the
+       next one is used instantly, so the app keeps working.
+
+       ALSO paste your Hugging Face token for image generation:
+       Get one at https://huggingface.co/settings/tokens
+    ══════════════════════════════════════════════════════════════ */
+    window._AQS_GROQ_MASTER_KEYS = [
+        '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',
+        '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',
+        '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',
+        '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',
+        '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',
+        // Add more keys here when you get them (up to 10 total):
+        // 'gsk_YOUR_KEY_6_HERE',
+        // 'gsk_YOUR_KEY_7_HERE',
+        // 'gsk_YOUR_KEY_8_HERE',
+        // 'gsk_YOUR_KEY_9_HERE',
+        // 'gsk_YOUR_KEY_10_HERE',
+    ].filter(function(k){ return k && k.startsWith('gsk_'); });
+
+    /* Paste your Hugging Face token here for image generation */
+    window.HF_TOKEN = 'PASTE_HF_TOKEN_HERE';
+    if (!window.AQS_ADMIN_SETTINGS) window.AQS_ADMIN_SETTINGS = {};
+    window.AQS_ADMIN_SETTINGS.hf_token = window.HF_TOKEN;
+
+    /* ──────────────────────────────────────────────────────────── */
+
     function _getMasterKeys() {
         var wk = window._AQS_GROQ_MASTER_KEYS;
         if (Array.isArray(wk) && wk.length) return wk;
@@ -50,7 +75,7 @@
         }
 
         var keys = _getMasterKeys();
-        if (!keys.length) throw new Error('No Groq API keys configured. Ask the site admin to add keys in Settings.');
+        if (!keys.length) throw new Error('No Groq API keys configured. Open js/aqs-groq-key.js and paste your keys.');
 
         var startIdx = _getIdx();
 
@@ -73,7 +98,7 @@
             return res;
         }
 
-        throw new Error('All Groq keys rate-limited (429). Try again in a moment.');
+        throw new Error('All Groq keys are rate-limited (429). Add more keys or wait a moment.');
     };
 
     window.setGroqKey = function(k){

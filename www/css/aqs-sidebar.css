@@ -211,13 +211,15 @@
 }
 .aqs-sidebar-logout:hover { color: #94a3b8 !important; background: rgba(255,255,255,0.08); }
 
-/* ── Mobile hamburger ── */
+/* ── Mobile hamburger ──
+   z-index: 10001 keeps it ABOVE the notification bars (z-index 9989/9990)
+   so the ticker/countdown never covers the menu button. ── */
 .aqs-sidebar-mobile-toggle {
     display: none;
     position: fixed;
     top: 12px;
     left: 12px;
-    z-index: 300;
+    z-index: 10001;
     width: 40px;
     height: 40px;
     background: linear-gradient(135deg, #6366f1, #8b5cf6);

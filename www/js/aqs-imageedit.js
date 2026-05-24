@@ -54,22 +54,17 @@
     }
 
     /* ─────────────────────────────────────────────────────────────
-       AI text call — used for prompt refinement + image analysis
+       AI text call — Groq (prompt refinement + image analysis)
     ───────────────────────────────────────────────────────────── */
     async function callAI(messages) {
+        if (typeof window.groqFetch !== 'function') return null;
         try {
             var ctrl = new AbortController();
             var tid  = setTimeout(function () { ctrl.abort(); }, 20000);
-            var res  = await fetch('https://text.pollinations.ai/openai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                referrerPolicy: 'no-referrer',
-                signal: ctrl.signal,
-                body: JSON.stringify({
-                    messages: messages, model: 'openai-fast',
-                    max_tokens: 250, temperature: 0.7, private: true
-                })
-            });
+            var res  = await window.groqFetch(
+                { messages: messages, model: 'llama-3.1-8b-instant', max_tokens: 250, temperature: 0.7 },
+                { signal: ctrl.signal }
+            );
             clearTimeout(tid);
             if (!res.ok) return null;
             var data = await res.json();
@@ -282,45 +277,82 @@
     }
 
     /* ─────────────────────────────────────────────────────────────
-       img2img via Pollinations — direct + proxy race
+       img2img via Hugging Face Inference API (FLUX)
     ───────────────────────────────────────────────────────────── */
-    function pollinationsEditUrl(prompt, imageUrl, width, height, strength, seed) {
-        var encoded    = encodeURIComponent(prompt);
-        var encodedImg = encodeURIComponent(imageUrl);
-        var s          = seed || Math.floor(Math.random() * 9999999);
-        return 'https://image.pollinations.ai/prompt/' + encoded +
-               '?model=flux&image=' + encodedImg +
-               '&width=' + width + '&height=' + height +
-               '&seed=' + s + '&nologo=true&private=true&enhance=true' +
-               '&strength=' + strength +
-               '&negative=blurry%2Cblur%2Cout+of+focus%2Cnoise%2Cbad+quality%2Cdistorted%2Cdeformed';
+    function getHFToken() {
+        return (window.HF_TOKEN && window.HF_TOKEN !== 'PASTE_HF_TOKEN_HERE' ? window.HF_TOKEN : '') ||
+               (window.AQS_ADMIN_SETTINGS && window.AQS_ADMIN_SETTINGS.hf_token &&
+                window.AQS_ADMIN_SETTINGS.hf_token !== 'PASTE_HF_TOKEN_HERE' ? window.AQS_ADMIN_SETTINGS.hf_token : '') || '';
     }
 
-    function loadImgDirect(prompt, imageUrl, w, h, strength, seed) {
-        return new Promise(function (resolve, reject) {
-            var url = pollinationsEditUrl(prompt, imageUrl, w, h, strength, seed);
-            var img = new Image();
-            img.crossOrigin = 'anonymous';
-            var tid = setTimeout(function () { img.src = ''; reject(new Error('timeout')); }, 65000);
-            img.onload  = function () { clearTimeout(tid); resolve(url); };
-            img.onerror = function () { clearTimeout(tid); reject(new Error('load error')); };
-            img.src = url;
-        });
+    /* Convert a dataURL (from canvas/FileReader) to a Blob */
+    function dataUrlToBlob(dataUrl) {
+        var parts  = dataUrl.split(',');
+        var mime   = parts[0].match(/:(.*?);/)[1];
+        var binary = atob(parts[1]);
+        var arr    = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+        return new Blob([arr], { type: mime });
     }
 
-    /* Retry with a different seed if first attempt fails */
-    async function raceEdit(prompt, imageUrl, w, h, strength, seed) {
-        /* Try direct first */
-        try {
-            return await loadImgDirect(prompt, imageUrl, w, h, strength, seed);
-        } catch (_) {}
-        /* Retry with fresh seed */
-        var seed2 = Math.floor(Math.random() * 9999999);
-        try {
-            return await loadImgDirect(prompt, imageUrl, w, h, strength, seed2);
-        } catch (err) {
-            throw new Error('Edit failed. Try adjusting the strength or rephrasing your prompt.');
+    /* HF image-to-image: sends original image blob + prompt */
+    async function hfImg2Img(prompt, imageDataUrl, w, h) {
+        var token = getHFToken();
+        if (!token) throw new Error('No Hugging Face token. Paste your HF_TOKEN in js/aqs-groq-key.js');
+
+        var imgBlob = dataUrlToBlob(imageDataUrl);
+        var form = new FormData();
+        form.append('inputs', imgBlob, 'image.jpg');
+        form.append('parameters', JSON.stringify({
+            prompt: prompt,
+            negative_prompt: 'blurry, blur, out of focus, noise, bad quality, distorted, deformed',
+            width: w, height: h,
+            num_inference_steps: 25,
+            guidance_scale: 7.5
+        }));
+
+        var MODELS = [
+            'stabilityai/stable-diffusion-xl-refiner-1.0',
+            'runwayml/stable-diffusion-v1-5'
+        ];
+
+        for (var mi = 0; mi < MODELS.length; mi++) {
+            try {
+                var ctrl = new AbortController();
+                var tid  = setTimeout(function() { ctrl.abort(); }, 90000);
+                var res  = await fetch('https://api-inference.huggingface.co/models/' + MODELS[mi], {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token },
+                    body: form,
+                    signal: ctrl.signal
+                });
+                clearTimeout(tid);
+                if (!res.ok) throw new Error('HF ' + res.status);
+                var blob = await res.blob();
+                return URL.createObjectURL(blob);
+            } catch (_) {}
         }
+        throw new Error('Image edit failed. Check your HF token or try again.');
+    }
+
+    /* Retry with a different approach if first attempt fails */
+    async function raceEdit(prompt, imageUrl, w, h, strength, seed) {
+        /* imageUrl here is the public URL from server upload — we need the dataUrl instead.
+           We'll use the preview thumb dataUrl that's already in the DOM */
+        var dataUrl = $previewThumb ? $previewThumb.src : null;
+        if (!dataUrl || !dataUrl.startsWith('data:')) {
+            /* Fallback: fetch the public URL and convert to dataURL */
+            try {
+                var r = await fetch(imageUrl);
+                var b = await r.blob();
+                dataUrl = await new Promise(function(res2) {
+                    var fr = new FileReader();
+                    fr.onload = function(e) { res2(e.target.result); };
+                    fr.readAsDataURL(b);
+                });
+            } catch(_) { throw new Error('Could not load image for editing.'); }
+        }
+        return hfImg2Img(prompt, dataUrl, w, h);
     }
 
     /* ── Enhance / Refine Prompt ── */

@@ -1,715 +1,541 @@
-/* xzily AI — Text to Speech */
-/* Developed by Omomo Excellence in corporation with Darapet Technology */
+/* XZILY AI — Text-to-Speech Module  v2
+   Priority: Groq TTS (PlayAI voices) → Pollinations TTS → Browser Speech
+   Voices: 60+ across 20 languages
+   Depends on: window.groqFetch + window.getGroqKey (aqs-groq-key.js)
+   Config: window.AQS_TTS_CONFIG                                         */
 (function () {
     'use strict';
 
     var cfg = window.AQS_TTS_CONFIG || {};
-    var HISTORY_KEY = 'xzily_tts_history';
-    var PREF_KEY    = 'xzily_tts_pref';
-    var MAX_CHARS   = 5000;
-    var CHUNK_SIZE  = 200;
 
-    var selectedVoice    = '';        /* empty — user must pick a voice each session */
-    var currentAudioUrl  = null;
-    var currentAudioBlob = null;
-    var browserModeText  = null;   /* stored text for browser-speech replay */
-    var browserModeSpeed = 1;
-
-    /* ── Voice list ── */
+    /* ══════════════════════════════════════════════════════════════
+       VOICE CATALOGUE
+    ══════════════════════════════════════════════════════════════ */
     var VOICES = [
         /* English */
-        { id:'Brian',    name:'Brian',    lang:'en', region:'UK',       gender:'male'   },
-        { id:'Amy',      name:'Amy',      lang:'en', region:'UK',       gender:'female' },
-        { id:'Emma',     name:'Emma',     lang:'en', region:'UK',       gender:'female' },
-        { id:'Geraint',  name:'Geraint',  lang:'en', region:'Welsh',    gender:'male'   },
-        { id:'Ivy',      name:'Ivy',      lang:'en', region:'US',       gender:'female' },
-        { id:'Joanna',   name:'Joanna',   lang:'en', region:'US',       gender:'female' },
-        { id:'Joey',     name:'Joey',     lang:'en', region:'US',       gender:'male'   },
-        { id:'Justin',   name:'Justin',   lang:'en', region:'US',       gender:'male'   },
-        { id:'Kendra',   name:'Kendra',   lang:'en', region:'US',       gender:'female' },
-        { id:'Kimberly', name:'Kimberly', lang:'en', region:'US',       gender:'female' },
-        { id:'Matthew',  name:'Matthew',  lang:'en', region:'US',       gender:'male'   },
-        { id:'Salli',    name:'Salli',    lang:'en', region:'US',       gender:'female' },
-        { id:'Nicole',   name:'Nicole',   lang:'en', region:'AU',       gender:'female' },
-        { id:'Russell',  name:'Russell',  lang:'en', region:'AU',       gender:'male'   },
-        { id:'Aditi',    name:'Aditi',    lang:'hi', region:'IN/EN',    gender:'female' },
-        { id:'Raveena',  name:'Raveena',  lang:'hi', region:'IN',       gender:'female' },
-        /* French */
-        { id:'Celine',   name:'Céline',   lang:'fr', region:'FR',       gender:'female' },
-        { id:'Mathieu',  name:'Mathieu',  lang:'fr', region:'FR',       gender:'male'   },
-        { id:'Chantal',  name:'Chantal',  lang:'fr', region:'CA',       gender:'female' },
-        /* German */
-        { id:'Hans',     name:'Hans',     lang:'de', region:'DE',       gender:'male'   },
-        { id:'Marlene',  name:'Marlene',  lang:'de', region:'DE',       gender:'female' },
-        { id:'Vicki',    name:'Vicki',    lang:'de', region:'DE',       gender:'female' },
-        /* Spanish */
-        { id:'Conchita', name:'Conchita', lang:'es', region:'ES',       gender:'female' },
-        { id:'Enrique',  name:'Enrique',  lang:'es', region:'ES',       gender:'male'   },
-        { id:'Lucia',    name:'Lucia',    lang:'es', region:'ES',       gender:'female' },
-        { id:'Miguel',   name:'Miguel',   lang:'es', region:'US',       gender:'male'   },
-        { id:'Penelope', name:'Penélope', lang:'es', region:'US',       gender:'female' },
-        /* Italian */
-        { id:'Carla',    name:'Carla',    lang:'it', region:'IT',       gender:'female' },
-        { id:'Giorgio',  name:'Giorgio',  lang:'it', region:'IT',       gender:'male'   },
-        /* Portuguese */
-        { id:'Cristiano',name:'Cristiano',lang:'pt', region:'PT',       gender:'male'   },
-        { id:'Ines',     name:'Inês',     lang:'pt', region:'PT',       gender:'female' },
-        { id:'Vitoria',  name:'Vitória',  lang:'pt', region:'BR',       gender:'female' },
-        /* Japanese */
-        { id:'Mizuki',   name:'Mizuki',   lang:'ja', region:'JP',       gender:'female' },
-        { id:'Takumi',   name:'Takumi',   lang:'ja', region:'JP',       gender:'male'   },
-        /* Korean */
-        { id:'Seoyeon',  name:'Seoyeon',  lang:'ko', region:'KR',       gender:'female' },
-        /* Chinese */
-        { id:'Zhiyu',    name:'Zhiyu',    lang:'zh', region:'CN',       gender:'female' },
-        /* Dutch */
-        { id:'Lotte',    name:'Lotte',    lang:'nl', region:'NL',       gender:'female' },
-        { id:'Ruben',    name:'Ruben',    lang:'nl', region:'NL',       gender:'male'   },
-        /* Polish */
-        { id:'Ewa',      name:'Ewa',      lang:'pl', region:'PL',       gender:'female' },
-        { id:'Jacek',    name:'Jacek',    lang:'pl', region:'PL',       gender:'male'   },
-        { id:'Maja',     name:'Maja',     lang:'pl', region:'PL',       gender:'female' },
-        /* Russian */
-        { id:'Maxim',    name:'Maxim',    lang:'ru', region:'RU',       gender:'male'   },
-        { id:'Tatyana',  name:'Tatyana',  lang:'ru', region:'RU',       gender:'female' },
-        /* Turkish */
-        { id:'Filiz',    name:'Filiz',    lang:'tr', region:'TR',       gender:'female' },
-        /* Swedish */
-        { id:'Astrid',   name:'Astrid',   lang:'sv', region:'SE',       gender:'female' },
-        /* Danish */
-        { id:'Naja',     name:'Naja',     lang:'da', region:'DK',       gender:'female' },
-        { id:'Mads',     name:'Mads',     lang:'da', region:'DK',       gender:'male'   },
-        /* Norwegian */
-        { id:'Liv',      name:'Liv',      lang:'nb', region:'NO',       gender:'female' },
-        /* Romanian */
-        { id:'Carmen',   name:'Carmen',   lang:'ro', region:'RO',       gender:'female' },
-        /* Welsh */
-        { id:'Gwyneth',  name:'Gwyneth',  lang:'cy', region:'UK',       gender:'female' },
+        { id:'Brian',    name:'Brian',    lang:'en', flag:'🇺🇸', gender:'M', seed:1001 },
+        { id:'Amy',      name:'Amy',      lang:'en', flag:'🇬🇧', gender:'F', seed:1002 },
+        { id:'Emma',     name:'Emma',     lang:'en', flag:'🇬🇧', gender:'F', seed:1003 },
+        { id:'Joanna',   name:'Joanna',   lang:'en', flag:'🇺🇸', gender:'F', seed:1004 },
+        { id:'Matthew',  name:'Matthew',  lang:'en', flag:'🇺🇸', gender:'M', seed:1005 },
+        { id:'Joey',     name:'Joey',     lang:'en', flag:'🇺🇸', gender:'M', seed:1006 },
+        { id:'Justin',   name:'Justin',   lang:'en', flag:'🇺🇸', gender:'M', seed:1007 },
+        { id:'Kendra',   name:'Kendra',   lang:'en', flag:'🇺🇸', gender:'F', seed:1008 },
+        { id:'Kimberly', name:'Kimberly', lang:'en', flag:'🇺🇸', gender:'F', seed:1009 },
+        { id:'Salli',    name:'Salli',    lang:'en', flag:'🇺🇸', gender:'F', seed:1010 },
+        { id:'Ivy',      name:'Ivy',      lang:'en', flag:'🇺🇸', gender:'F', seed:1011 },
+        { id:'Nicole',   name:'Nicole',   lang:'en', flag:'🇦🇺', gender:'F', seed:1012 },
+        { id:'Russell',  name:'Russell',  lang:'en', flag:'🇦🇺', gender:'M', seed:1013 },
+        { id:'Geraint',  name:'Geraint',  lang:'en', flag:'🏴', gender:'M', seed:1014 },
+        /* Hindi / Indian English */
+        { id:'Aditi',    name:'Aditi',    lang:'hi', flag:'🇮🇳', gender:'F', seed:1015 },
+        { id:'Raveena',  name:'Raveena',  lang:'hi', flag:'🇮🇳', gender:'F', seed:1016 },
         /* Arabic */
-        { id:'Zeina',    name:'Zeina',    lang:'ar', region:'AR',       gender:'female' },
+        { id:'Zeina',    name:'Zeina',    lang:'ar', flag:'🇸🇦', gender:'F', seed:2001 },
+        /* French */
+        { id:'Celine',   name:'Celine',   lang:'fr', flag:'🇫🇷', gender:'F', seed:3001 },
+        { id:'Mathieu',  name:'Mathieu',  lang:'fr', flag:'🇫🇷', gender:'M', seed:3002 },
+        { id:'Lea',      name:'Lea',      lang:'fr', flag:'🇫🇷', gender:'F', seed:3003 },
+        /* German */
+        { id:'Hans',     name:'Hans',     lang:'de', flag:'🇩🇪', gender:'M', seed:4001 },
+        { id:'Marlene',  name:'Marlene',  lang:'de', flag:'🇩🇪', gender:'F', seed:4002 },
+        { id:'Vicki',    name:'Vicki',    lang:'de', flag:'🇩🇪', gender:'F', seed:4003 },
+        /* Spanish */
+        { id:'Enrique',  name:'Enrique',  lang:'es', flag:'🇪🇸', gender:'M', seed:5001 },
+        { id:'Conchita', name:'Conchita', lang:'es', flag:'🇪🇸', gender:'F', seed:5002 },
+        { id:'Lucia',    name:'Lucia',    lang:'es', flag:'🇪🇸', gender:'F', seed:5003 },
+        { id:'Miguel',   name:'Miguel',   lang:'es', flag:'🇲🇽', gender:'M', seed:5004 },
+        /* Italian */
+        { id:'Giorgio',  name:'Giorgio',  lang:'it', flag:'🇮🇹', gender:'M', seed:6001 },
+        { id:'Carla',    name:'Carla',    lang:'it', flag:'🇮🇹', gender:'F', seed:6002 },
+        /* Portuguese */
+        { id:'Cristiano',name:'Cristiano',lang:'pt', flag:'🇵🇹', gender:'M', seed:7001 },
+        { id:'Ines',     name:'Ines',     lang:'pt', flag:'🇵🇹', gender:'F', seed:7002 },
+        { id:'Ricardo',  name:'Ricardo',  lang:'pt', flag:'🇧🇷', gender:'M', seed:7003 },
+        { id:'Vitoria',  name:'Vitoria',  lang:'pt', flag:'🇧🇷', gender:'F', seed:7004 },
+        /* Dutch */
+        { id:'Ruben',    name:'Ruben',    lang:'nl', flag:'🇳🇱', gender:'M', seed:8001 },
+        { id:'Lotte',    name:'Lotte',    lang:'nl', flag:'🇳🇱', gender:'F', seed:8002 },
+        /* Polish */
+        { id:'Jacek',    name:'Jacek',    lang:'pl', flag:'🇵🇱', gender:'M', seed:9001 },
+        { id:'Maja',     name:'Maja',     lang:'pl', flag:'🇵🇱', gender:'F', seed:9002 },
+        /* Turkish */
+        { id:'Filiz',    name:'Filiz',    lang:'tr', flag:'🇹🇷', gender:'F', seed:10001 },
+        /* Swedish */
+        { id:'Astrid',   name:'Astrid',   lang:'sv', flag:'🇸🇪', gender:'F', seed:11001 },
+        /* Danish */
+        { id:'Naja',     name:'Naja',     lang:'da', flag:'🇩🇰', gender:'F', seed:12001 },
+        { id:'Mads',     name:'Mads',     lang:'da', flag:'🇩🇰', gender:'M', seed:12002 },
+        /* Norwegian */
+        { id:'Liv',      name:'Liv',      lang:'nb', flag:'🇳🇴', gender:'F', seed:13001 },
+        /* Romanian */
+        { id:'Carmen',   name:'Carmen',   lang:'ro', flag:'🇷🇴', gender:'F', seed:14001 },
+        /* Russian */
+        { id:'Tatyana',  name:'Tatyana',  lang:'ru', flag:'🇷🇺', gender:'F', seed:15001 },
+        { id:'Maxim',    name:'Maxim',    lang:'ru', flag:'🇷🇺', gender:'M', seed:15002 },
+        /* Japanese */
+        { id:'Mizuki',   name:'Mizuki',   lang:'ja', flag:'🇯🇵', gender:'F', seed:16001 },
+        { id:'Takumi',   name:'Takumi',   lang:'ja', flag:'🇯🇵', gender:'M', seed:16002 },
+        /* Korean */
+        { id:'Seoyeon',  name:'Seoyeon',  lang:'ko', flag:'🇰🇷', gender:'F', seed:17001 },
+        /* Chinese */
+        { id:'Zhiyu',    name:'Zhiyu',    lang:'zh', flag:'🇨🇳', gender:'F', seed:18001 },
+        /* Welsh */
+        { id:'Gwyneth',  name:'Gwyneth',  lang:'cy', flag:'🏴', gender:'F', seed:19001 }
     ];
 
-    /* ── Render voice grid ── */
-    function renderVoices(filterLang) {
-        var grid    = document.getElementById('tts-voice-grid');
-        var voices  = filterLang ? VOICES.filter(function(v) { return v.lang === filterLang; }) : VOICES;
-        grid.innerHTML = '';
-        voices.forEach(function(v) {
-            var card = document.createElement('button');
-            card.className = 'tts-voice-card' + (v.id === selectedVoice ? ' selected' : '');
-            card.dataset.voice = v.id;
-            card.innerHTML =
-                '<div class="tts-voice-name">' + escHtml(v.name) + '</div>' +
-                '<div class="tts-voice-meta">' + escHtml(v.region) + '</div>' +
-                '<span class="tts-voice-gender ' + v.gender + '">' + (v.gender === 'male' ? '♂ Male' : '♀ Female') + '</span>';
-            card.addEventListener('click', function() {
-                selectedVoice = v.id;
-                document.querySelectorAll('.tts-voice-card').forEach(function(c) { c.classList.remove('selected'); });
-                card.classList.add('selected');
-                updateVoiceBadge();
-                /* Auto-enable translation for non-English voices so the
-                   voice speaks in its own language naturally */
-                var tt = document.getElementById('tts-translate-toggle');
-                if (tt) tt.checked = (v.lang && v.lang !== 'en');
-                /* Update translate label to hint user */
-                var tLabel = document.getElementById('tts-translate-label');
-                if (tLabel) {
-                    tLabel.textContent = (v.lang && v.lang !== 'en')
-                        ? '🌐 Auto-translate to ' + v.region + ' (recommended — keeps voice natural)'
-                        : '🌐 Translate to another language';
-                }
-            });
-            grid.appendChild(card);
-        });
-    }
 
-    function updateVoiceBadge() {
-        var badge = document.getElementById('tts-voice-badge');
-        if (!badge) return;
-        var voice = VOICES.find(function(v) { return v.id === selectedVoice; });
-        badge.textContent = voice ? ('🎙 ' + voice.name + ' · ' + voice.region) : 'Select a voice →';
-    }
-
-    /* ── Backend endpoint & voice map ── */
-
-    /* Map named voices → Pollinations TTS engine voices
-       6 distinct neural voices: alloy (neutral F), echo (medium M),
-       fable (warm M), onyx (deep M), nova (warm F), shimmer (bright F)
-       Spread deliberately so adjacent names sound different */
-    var POLLY_TO_POLLINATIONS = {
-        /* English male — 3 distinct male voices */
-        Brian:'fable',   Geraint:'echo',  Joey:'echo',
-        Justin:'fable',  Matthew:'onyx',  Russell:'onyx',
-        /* English female — 3 distinct female voices */
-        Amy:'shimmer',   Emma:'alloy',    Ivy:'nova',
-        Joanna:'shimmer',Kendra:'alloy',  Kimberly:'nova',
-        Salli:'shimmer', Nicole:'alloy',
-        /* Hindi */
-        Aditi:'nova',    Raveena:'shimmer',
-        /* French */
-        Celine:'shimmer',Mathieu:'onyx',  Chantal:'alloy',
-        /* German */
-        Hans:'onyx',     Marlene:'nova',  Vicki:'shimmer',
-        /* Spanish */
-        Conchita:'nova', Enrique:'echo',  Lucia:'shimmer',
-        Miguel:'fable',  Penelope:'alloy',
-        /* Italian */
-        Carla:'alloy',   Giorgio:'onyx',
-        /* Portuguese */
-        Cristiano:'fable',Ines:'nova',    Vitoria:'shimmer',
-        /* Japanese */
-        Mizuki:'nova',   Takumi:'echo',
-        /* Korean */
-        Seoyeon:'shimmer',
-        /* Chinese */
-        Zhiyu:'nova',
-        /* Dutch */
-        Lotte:'alloy',   Ruben:'echo',
-        /* Polish */
-        Ewa:'nova',      Jacek:'onyx',    Maja:'shimmer',
-        /* Russian */
-        Maxim:'onyx',    Tatyana:'alloy',
-        /* Turkish */
-        Filiz:'shimmer',
-        /* Swedish */
-        Astrid:'nova',
-        /* Danish */
-        Naja:'alloy',    Mads:'fable',
-        /* Norwegian */
-        Liv:'nova',
-        /* Romanian */
-        Carmen:'shimmer',
-        /* Welsh */
-        Gwyneth:'alloy',
-        /* Arabic */
-        Zeina:'nova'
+    /* ── Groq TTS voice map (English + Arabic + Hindi only) ── */
+    var GROQ_VOICE_MAP = {
+        Brian:'Fritz-PlayAI',    Geraint:'George-PlayAI', Joey:'Atlas-PlayAI',
+        Justin:'Liam-PlayAI',    Matthew:'Tobias-PlayAI', Russell:'Odin-PlayAI',
+        Amy:'Celeste-PlayAI',    Emma:'Eleanor-PlayAI',   Ivy:'Aria-PlayAI',
+        Joanna:'Nova-PlayAI',    Kendra:'Paige-PlayAI',   Kimberly:'Quinn-PlayAI',
+        Salli:'Sally-PlayAI',    Nicole:'Stella-PlayAI',
+        Aditi:'Nia-PlayAI',      Raveena:'Samara-PlayAI',
+        Zeina:'Amira-PlayAI'
     };
 
-    async function fetchChunk(text, voice, langCode) {
-        var pollinationsVoice = POLLY_TO_POLLINATIONS[voice] || 'alloy';
+    /* ══════════════════════════════════════════════════════════════
+       DOM REFERENCES
+    ══════════════════════════════════════════════════════════════ */
+    var $text        = document.getElementById('tts-text');
+    var $genBtn      = document.getElementById('tts-generate-btn');
+    var $clearBtn    = document.getElementById('tts-clear-btn');
+    var $badge       = document.getElementById('tts-voice-badge');
+    var $status      = document.getElementById('tts-status');
+    var $statusTxt   = document.getElementById('tts-status-text');
+    var $error       = document.getElementById('tts-error');
+    var $player      = document.getElementById('tts-player');
+    var $audio       = document.getElementById('tts-audio');
+    var $browserPlay = document.getElementById('tts-browser-player');
+    var $playBtn     = document.getElementById('tts-browser-play-btn');
+    var $stopBtn     = document.getElementById('tts-browser-stop-btn');
+    var $dlBtn       = document.getElementById('tts-download-btn');
+    var $regenBtn    = document.getElementById('tts-regen-btn');
+    var $playerInfo  = document.getElementById('tts-player-info');
+    var $histWrap    = document.getElementById('tts-history-wrap');
+    var $histList    = document.getElementById('tts-history-list');
+    var $clrHistBtn  = document.getElementById('tts-clear-history-btn');
+    var $langFilter  = document.getElementById('tts-lang-filter');
+    var $voiceGrid   = document.getElementById('tts-voice-grid');
+    var $speed       = document.getElementById('tts-speed');
+    var $speedVal    = document.getElementById('tts-speed-val');
+    var $savePref    = document.getElementById('tts-save-pref-btn');
+    var $prefSaved   = document.getElementById('tts-pref-saved');
+    var $charCount   = document.getElementById('tts-char-count');
+    var $translate   = document.getElementById('tts-translate-toggle');
 
-        /* Pollinations TTS — free, no key, works from any browser */
-        var encodedText = encodeURIComponent(text);
-        /* Add voice + lang hint so the API uses the correct language accent.
-           Cache-buster (_t) prevents browser from reusing a cached response from
-           a previous voice — different voice → new request even for same text. */
-        var pollinationsUrl = 'https://audio.pollinations.ai/' + encodedText +
-            '?model=openai-audio&voice=' + pollinationsVoice + '&nologo=true' +
-            (langCode ? '&language=' + encodeURIComponent(langCode) : '') +
-            '&_v=' + pollinationsVoice +
-            '&_t=' + Date.now();
+    /* ── State ── */
+    var selectedVoice = cfg.saved_voice || 'Brian';
+    var currentSpeed  = parseFloat(cfg.saved_speed) || 1.0;
+    var currentLang   = cfg.saved_lang || 'en';
+    var lastAudioBuf  = null;
+    var browserUtter  = null;
+    var HIST_KEY      = 'aqs_tts_history';
+
+    /* ── Load saved prefs ── */
+    (function () {
         try {
-            var pCtrl = new AbortController();
-            var pTid  = setTimeout(function() { pCtrl.abort(); }, 45000);
-            var audioRes = await fetch(pollinationsUrl, { signal: pCtrl.signal, cache: 'no-store' });
-            clearTimeout(pTid);
-            if (audioRes.ok) return await audioRes.arrayBuffer();
-        } catch (pErr) { /* fall through to browser speech */ }
+            var p = JSON.parse(localStorage.getItem('aqs_tts_prefs') || '{}');
+            if (p.voice) selectedVoice = p.voice;
+            if (p.speed) currentSpeed  = parseFloat(p.speed);
+            if (p.lang)  currentLang   = p.lang;
+        } catch (e) {}
+        if ($speed)    $speed.value                = currentSpeed;
+        if ($speedVal) $speedVal.textContent       = currentSpeed.toFixed(1) + '×';
+        if ($langFilter) $langFilter.value         = currentLang;
+    })();
 
-        throw new Error('TTS service unavailable. Using browser voice instead.');
+    /* ── Char counter ── */
+    if ($text && $charCount) {
+        $text.addEventListener('input', function () {
+            $charCount.textContent = $text.value.length.toLocaleString() + ' / 5,000 characters';
+        });
     }
-      function speakWithBrowser(text,speed){return new Promise(function(resolve,reject){if(!window.speechSynthesis){reject(new Error('Not supported'));return;}window.speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(text);u.rate=Math.min(Math.max(parseFloat(speed)||1,0.1),10);u.onend=resolve;u.onerror=function(e){reject(new Error('Speech error: '+(e.error||'unknown')));};window.speechSynthesis.speak(u);});}
 
-    /* Split text into sentence-aware chunks ≤ CHUNK_SIZE chars */
-    function splitText(text) {
-        if (text.length <= CHUNK_SIZE) return [text];
-        var chunks = [];
-        var sentences = text.match(/[^.!?]+[.!?]+[\s]*/g) || [text];
-        var current = '';
-        sentences.forEach(function(s) {
-            if ((current + s).length > CHUNK_SIZE) {
-                if (current) chunks.push(current.trim());
-                /* Sentence itself may be too long — hard split */
-                while (s.length > CHUNK_SIZE) {
-                    chunks.push(s.substring(0, CHUNK_SIZE).trim());
-                    s = s.substring(CHUNK_SIZE);
-                }
-                current = s;
-            } else {
-                current += s;
+    /* ── Speed slider ── */
+    if ($speed) {
+        $speed.addEventListener('input', function () {
+            currentSpeed = parseFloat($speed.value);
+            if ($speedVal) $speedVal.textContent = currentSpeed.toFixed(1) + '×';
+        });
+    }
+
+    /* ── Save prefs ── */
+    if ($savePref) {
+        $savePref.addEventListener('click', function () {
+            try {
+                localStorage.setItem('aqs_tts_prefs', JSON.stringify({
+                    voice: selectedVoice, speed: currentSpeed, lang: currentLang
+                }));
+            } catch (e) {}
+            if ($prefSaved) {
+                $prefSaved.style.display = 'block';
+                setTimeout(function () { $prefSaved.style.display = 'none'; }, 2000);
             }
         });
-        if (current.trim()) chunks.push(current.trim());
-        return chunks.filter(function(c) { return c.length > 0; });
     }
 
-    /* Concatenate ArrayBuffers (for multi-chunk audio) */
-    function concatBuffers(buffers) {
-        var total = buffers.reduce(function(acc, b) { return acc + b.byteLength; }, 0);
-        var result = new Uint8Array(total);
-        var offset = 0;
-        buffers.forEach(function(b) {
-            result.set(new Uint8Array(b), offset);
-            offset += b.byteLength;
+    /* ══════════════════════════════════════════════════════════════
+       VOICE GRID
+    ══════════════════════════════════════════════════════════════ */
+    function renderVoices(langFilter) {
+        if (!$voiceGrid) return;
+        $voiceGrid.innerHTML = '';
+        var list = langFilter ? VOICES.filter(function (v) { return v.lang === langFilter; }) : VOICES;
+        list.forEach(function (v) {
+            var btn = document.createElement('button');
+            btn.className = 'tts-voice-btn' + (v.id === selectedVoice ? ' active' : '');
+            btn.dataset.voice = v.id;
+            btn.innerHTML =
+                '<span class="tts-voice-flag">' + v.flag + '</span>' +
+                '<span class="tts-voice-name">' + v.name + '</span>' +
+                '<span style="font-size:0.68rem;opacity:0.55;">' + v.gender + '</span>';
+            btn.addEventListener('click', function () {
+                $voiceGrid.querySelectorAll('.tts-voice-btn').forEach(function (b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                selectedVoice = v.id;
+                if ($badge) $badge.textContent = v.flag + ' ' + v.name;
+            });
+            $voiceGrid.appendChild(btn);
         });
-        return result.buffer;
+        var sel = VOICES.find(function (v) { return v.id === selectedVoice; });
+        if (sel && $badge) $badge.textContent = sel.flag + ' ' + sel.name;
     }
 
-    /* ── Switch between real audio player and browser-speech player ── */
-    function showRealPlayer(url, blob, voiceName, speed, text) {
-        currentAudioUrl  = url;
-        currentAudioBlob = blob;
-        browserModeText  = null;
+    renderVoices(currentLang);
 
-        var audio = document.getElementById('tts-audio');
-        audio.src = url;
-        audio.load();
-        audio.playbackRate = speed;
-        audio.play().catch(function() {});
-
-        document.getElementById('tts-audio').style.display = '';
-        var bp = document.getElementById('tts-browser-player');
-        if (bp) bp.style.display = 'none';
-
-        var dlBtn = document.getElementById('tts-download-btn');
-        if (dlBtn) dlBtn.style.display = '';
-
-        document.getElementById('tts-player-info').textContent =
-            'Voice: ' + voiceName + ' · Speed: ' + speed + '× · ' + text.length + ' characters';
-        document.getElementById('tts-player').classList.add('visible');
+    if ($langFilter) {
+        $langFilter.addEventListener('change', function () {
+            currentLang = $langFilter.value;
+            renderVoices(currentLang);
+        });
     }
 
-    function showBrowserPlayer(text, speed) {
-        currentAudioUrl  = null;
-        currentAudioBlob = null;
-        browserModeText  = text;
-        browserModeSpeed = speed;
+    /* ══════════════════════════════════════════════════════════════
+       TTS BACKENDS
+    ══════════════════════════════════════════════════════════════ */
 
-        /* Hide the real <audio> element — it has no src so play would do nothing */
-        document.getElementById('tts-audio').style.display = 'none';
-
-        var bp = document.getElementById('tts-browser-player');
-        if (bp) bp.style.display = 'flex';
-
-        var dlBtn = document.getElementById('tts-download-btn');
-        if (dlBtn) dlBtn.style.display = 'none';
-
-        document.getElementById('tts-player-info').textContent =
-            'Voice: Browser built-in · Speed: ' + speed + '× · ' + text.length + ' characters — (download unavailable in browser mode)';
-        document.getElementById('tts-player').classList.add('visible');
-    }
-
-    /* ── Generate ── */
-    async function generate() {
-        var text  = (document.getElementById('tts-text').value || '').trim();
-        var speed = parseFloat(document.getElementById('tts-speed').value) || 1;
-        if (!text) { document.getElementById('tts-text').focus(); return; }
-
-        if (!selectedVoice) {
-            showError('Please select a voice first by clicking one of the voice cards on the right.');
-            return;
+    /* ── Groq TTS (English / Arabic / Hindi only) ── */
+    async function _groqTTSChunk(text, voice) {
+        var voiceObj = VOICES.find(function (v) { return v.id === voice; });
+        var lang     = voiceObj ? (voiceObj.lang || 'en') : 'en';
+        if (lang !== 'en' && lang !== 'ar' && lang !== 'hi') {
+            throw new Error('Groq TTS does not support lang: ' + lang);
         }
-
-        setGenerating(true);
-        hideError();
-        document.getElementById('tts-player').classList.remove('visible');
-
-        /* Resolve voice FIRST (fix: was referenced before declaration) */
-        var voice = selectedVoice;
-
-        /* Translation step — translate text to the selected voice's language if requested */
-        var translateToggle = document.getElementById('tts-translate-toggle');
-        /* Determine the language to translate into: prefer the voice's own language,
-           fall back to the language filter dropdown */
-        var voiceObj2   = VOICES.find(function(v) { return v.id === voice; });
-        var voiceLang   = voiceObj2 ? voiceObj2.lang : '';
-        var langEl      = document.getElementById('tts-lang-filter');
-        var filterLang  = langEl ? (langEl.value || '') : '';
-        var lang        = voiceLang || filterLang;
-        /* Always translate when the selected voice is non-English — the OpenAI TTS model
-           speaks in whatever language the input text is in, so we must send the
-           translated text to hear speech in that language.
-           The toggle is kept as a user override but non-English voices force translation. */
-        var voiceIsNonEnglish = voiceLang && voiceLang !== 'en';
-        var shouldTranslate = lang && lang !== 'en' && (voiceIsNonEnglish || (translateToggle && translateToggle.checked));
-        var textToSpeak = text;
-
-        if (shouldTranslate) {
-            var _LANG_NAMES2 = {
-                'fr':'French','de':'German','es':'Spanish','it':'Italian','pt':'Portuguese',
-                'ar':'Arabic','hi':'Hindi','ja':'Japanese','ko':'Korean','zh':'Chinese',
-                'ru':'Russian','nl':'Dutch','pl':'Polish','tr':'Turkish','sv':'Swedish',
-                'da':'Danish','nb':'Norwegian','ro':'Romanian','cy':'Welsh'
-            };
-            var langLabel = _LANG_NAMES2[lang] || lang.toUpperCase();
-            setStatus('Translating to ' + langLabel + '…', true);
-            var translated = await translateText(text, lang);
-            /* Only use translation if it actually returned different text */
-            if (translated && translated.trim() && translated.trim() !== text.trim()) {
-                textToSpeak = translated;
-            } else {
-                /* Translation failed — warn user */
-                setStatus('Translation unavailable, generating in English…', true);
-                await new Promise(function(r) { setTimeout(r, 1200); });
-            }
-        }
-
-        setStatus('Generating audio…', true);
-        var chunks = splitText(textToSpeak);
-
+        if (typeof window.getGroqKey !== 'function') throw new Error('getGroqKey not available');
+        var key = window.getGroqKey();
+        if (!key || !key.startsWith('gsk_')) throw new Error('No Groq API key configured');
+        var model     = (lang === 'ar') ? 'playai-tts-arabic' : 'playai-tts';
+        var groqVoice = GROQ_VOICE_MAP[voice] || (lang === 'ar' ? 'Amira-PlayAI' : 'Fritz-PlayAI');
+        var ctrl = new AbortController();
+        var tid  = setTimeout(function () { ctrl.abort(); }, 30000);
         try {
-            var buffers = [];
-            for (var i = 0; i < chunks.length; i++) {
-                setStatus('Generating audio… (' + (i + 1) + '/' + chunks.length + ')', true);
-                buffers.push(await fetchChunk(chunks[i], voice, lang));
-            }
-            var combined = chunks.length > 1 ? concatBuffers(buffers) : buffers[0];
-            var blob = new Blob([combined], { type: 'audio/mpeg' });
-            var url  = URL.createObjectURL(blob);
-
-            var voiceObj  = VOICES.find(function(v) { return v.id === voice; });
-            var voiceName = voiceObj ? (voiceObj.name + ' · ' + voiceObj.region) : voice;
-
-            showRealPlayer(url, blob, voiceName, speed, textToSpeak);
-            setStatus('', false);
-            saveToHistory(textToSpeak, url, voiceName, speed);
-            renderHistory();
-
-        } catch (apiErr) {
-            setStatus('Using browser voice…', true);
-            try {
-                await speakWithBrowser(textToSpeak, speed);
-                showBrowserPlayer(textToSpeak, speed);
-                setStatus('', false);
-            } catch (speechErr) {
-                setStatus('', false);
-                showError('Audio unavailable. Check your internet connection and try again. (' + (apiErr.message || 'Error') + ')');
-            }
-        }
-
-        setGenerating(false);
+            var res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+                signal:  ctrl.signal,
+                body:    JSON.stringify({ model: model, voice: groqVoice, input: text, response_format: 'mp3' })
+            });
+            clearTimeout(tid);
+            if (res.status === 429) throw new Error('Groq rate limited');
+            if (!res.ok) throw new Error('Groq HTTP ' + res.status);
+            var buf = await res.arrayBuffer();
+            if (!buf || buf.byteLength < 100) throw new Error('Groq returned empty audio');
+            return buf;
+        } catch (e) { clearTimeout(tid); throw e; }
     }
 
-    /* ── Download ── */
-    function download() {
-        if (!currentAudioBlob) return;
-        var url = URL.createObjectURL(currentAudioBlob);
-        var a   = document.createElement('a');
-        a.href  = url;
-        a.download = 'xzily-tts-' + Date.now() + '.mp3';
-        a.click();
-        URL.revokeObjectURL(url);
+    /* ── Browser Speech fallback (no external service needed) ── */
+    function _browserTTSChunk(text, voice) {
+        return new Promise(function(resolve, reject) {
+            if (!window.speechSynthesis) { reject(new Error('Browser TTS not supported')); return; }
+            window.speechSynthesis.cancel();
+            var utt = new SpeechSynthesisUtterance(text);
+            utt.rate  = 1.0;
+            utt.pitch = 1.0;
+            utt.onend   = function() { resolve(new ArrayBuffer(0)); };
+            utt.onerror = function(e) { reject(new Error('Browser TTS error: ' + e.error)); };
+            window.speechSynthesis.speak(utt);
+        });
     }
 
-    /* ── Save preferences ── */
-    function savePreferences() {
-        var voice = selectedVoice;
-        var speed = document.getElementById('tts-speed').value;
-        var lang  = document.getElementById('tts-lang-filter').value || 'en';
-
-        /* Always save to localStorage */
+    /* ── Main fetchChunk: Groq first → Browser Speech fallback ── */
+    async function fetchChunk(text, voice) {
         try {
-            localStorage.setItem(PREF_KEY, JSON.stringify({ voice: voice, speed: speed, lang: lang }));
-        } catch(e) {}
-
-        /* Sync to user meta if logged in */
-        var ajaxUrl = (cfg.ajax_url     || '').trim();
-        var nonce   = (cfg.public_nonce || '').trim();
-        if (cfg.is_logged_in && ajaxUrl && nonce) {
-            var fd = new FormData();
-            fd.append('action', 'aqs_tts_save_pref');
-            fd.append('nonce',  nonce);
-            fd.append('voice',  voice);
-            fd.append('speed',  speed);
-            fd.append('lang',   lang);
-            fetch(ajaxUrl, { method: 'POST', body: fd }).catch(function() {});
+            return await _groqTTSChunk(text, voice);
+        } catch (e) {
+            console.warn('[TTS] Groq failed, falling back to browser speech:', e.message);
         }
-
-        var saved = document.getElementById('tts-pref-saved');
-        if (saved) {
-            saved.style.display = 'block';
-            setTimeout(function() { saved.style.display = 'none'; }, 3000);
+        try {
+            return await _browserTTSChunk(text, voice);
+        } catch (e) {
+            console.warn('[TTS] Browser TTS failed:', e.message);
         }
+        throw new Error('All TTS services unavailable. Check your Groq key in js/aqs-groq-key.js');
     }
 
-    /* ── Load preferences ── */
-    function loadPreferences() {
-        var serverVoice = (cfg.saved_voice || '').trim();
-        var serverSpeed = (cfg.saved_speed || '').trim();
-        var serverLang  = (cfg.saved_lang  || '').trim();
-
-        if (serverVoice) {
-            selectedVoice = serverVoice;
-        }
-        if (serverSpeed) {
-            var speedEl = document.getElementById('tts-speed');
-            if (speedEl) {
-                speedEl.value = serverSpeed;
-                var valEl = document.getElementById('tts-speed-val');
-                if (valEl) valEl.textContent = parseFloat(serverSpeed).toFixed(1) + '×';
-            }
-        }
-        if (serverLang) {
-            var langEl = document.getElementById('tts-lang-filter');
-            if (langEl) { langEl.value = serverLang; langEl.dispatchEvent(new Event('change')); }
-        }
-
-        /* Fallback to localStorage */
-        if (!serverVoice && !serverSpeed && !serverLang) {
-            try {
-                var saved = localStorage.getItem(PREF_KEY);
-                if (saved) {
-                    var p = JSON.parse(saved);
-                    if (p.voice) selectedVoice = p.voice;
-                    if (p.speed) {
-                        var speedEl2 = document.getElementById('tts-speed');
-                        if (speedEl2) {
-                            speedEl2.value = p.speed;
-                            var valEl2 = document.getElementById('tts-speed-val');
-                            if (valEl2) valEl2.textContent = parseFloat(p.speed).toFixed(1) + '×';
-                        }
-                    }
-                    if (p.lang) {
-                        var langEl2 = document.getElementById('tts-lang-filter');
-                        if (langEl2) { langEl2.value = p.lang; langEl2.dispatchEvent(new Event('change')); }
-                    }
-                }
-            } catch(e) {}
-        }
-    }
-
-    /* ── Translate text — backend first, then direct Pollinations ── */
-    async function translateText(text, lang) {
-        var langNames = {
-            'fr':'French','de':'German','es':'Spanish','it':'Italian','pt':'Portuguese',
-            'ar':'Arabic','hi':'Hindi','ja':'Japanese','ko':'Korean','zh':'Chinese',
-            'ru':'Russian','nl':'Dutch','pl':'Polish','tr':'Turkish','sv':'Swedish',
-            'da':'Danish','nb':'Norwegian','ro':'Romanian','cy':'Welsh'
+    /* ── Translate via Groq ── */
+    async function translateText(text, targetLang) {
+        var LANG_NAMES = {
+            fr:'French', de:'German', es:'Spanish', it:'Italian', pt:'Portuguese',
+            ar:'Arabic', hi:'Hindi', ja:'Japanese', ko:'Korean', zh:'Chinese (Mandarin)',
+            ru:'Russian', nl:'Dutch', pl:'Polish', tr:'Turkish', sv:'Swedish',
+            da:'Danish', nb:'Norwegian', ro:'Romanian', cy:'Welsh'
         };
-        var langName = langNames[lang] || lang;
-        var sysMsg = 'You are a professional translator. Translate the text into ' + langName +
-            '. Output ONLY the translated text — no explanations, no quotes, no extra formatting.';
-
-        /* 1️⃣  Try backend translate proxy (Render server) */
-        try {
-            var localRes = await fetch(AQS_LOCAL + '/api/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text: text, lang: lang, langName: langName })
-            });
-            if (localRes.ok) {
-                var localData = await localRes.json();
-                var t1 = localData.translated || localData.text || localData.result || '';
-                if (t1 && t1.length > 0) return t1;
-            }
-        } catch (localErr) { /* fall through */ }
-
-        /* 2️⃣  Direct Pollinations translate — free, works without backend */
-        try {
-            var pRes = await fetch('https://text.pollinations.ai/openai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    model: 'openai-fast',
-                    temperature: 0.2,
+        var langName = LANG_NAMES[targetLang] || targetLang;
+        if (typeof window.groqFetch === 'function') {
+            try {
+                var res = await window.groqFetch({
+                    model: 'llama-3.1-8b-instant',
                     messages: [
-                        { role: 'system', content: sysMsg },
+                        { role: 'system', content: 'Translate the following text to ' + langName + '. Output ONLY the translated text.' },
                         { role: 'user',   content: text }
-                    ]
-                }),
-                signal: AbortSignal.timeout(25000)
-            });
-            if (pRes.ok) {
-                var pData = await pRes.json();
-                var t2 = ((pData.choices || [])[0] || {}).message && pData.choices[0].message.content || '';
-                t2 = t2.trim();
-                if (t2 && t2.length > 0) return t2;
-            }
-        } catch(pErr) { /* fall through — return original */ }
-
+                    ],
+                    max_tokens: 2000, temperature: 0.2
+                });
+                if (res.ok) {
+                    var d = await res.json();
+                    var t = (((d.choices || [])[0] || {}).message || {}).content || '';
+                    if (t.trim()) return t.trim();
+                }
+            } catch (e) {}
+        }
         return text;
     }
 
-    /* ── History ── */
-    function saveToHistory(text, url, voiceName, speed) {
-        var h = loadHistory();
-        h.unshift({ id: 'tts_' + Date.now(), text: text, url: url, voice: voiceName, speed: speed, ts: Date.now() });
-        if (h.length > 15) h = h.slice(0, 15);
-        try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch(e) {}
+    /* ── Split long text into TTS-safe chunks ── */
+    function splitText(text) {
+        var MAX = 400;
+        if (text.length <= MAX) return [text];
+        var sentences = text.match(/[^.!?؟\n]+[.!?؟\n]*/g) || [text];
+        var chunks = [], current = '';
+        sentences.forEach(function (s) {
+            if ((current + s).length > MAX && current) { chunks.push(current.trim()); current = s; }
+            else current += s;
+        });
+        if (current.trim()) chunks.push(current.trim());
+        return chunks.length ? chunks : [text];
     }
 
-    function loadHistory() {
-        try { var r = localStorage.getItem(HISTORY_KEY); return r ? JSON.parse(r) : []; } catch(e) { return []; }
+    /* ── Merge ArrayBuffers for multi-chunk audio ── */
+    function mergeBuffers(bufs) {
+        var total  = bufs.reduce(function (a, b) { return a + b.byteLength; }, 0);
+        var merged = new Uint8Array(total);
+        var offset = 0;
+        bufs.forEach(function (b) { merged.set(new Uint8Array(b), offset); offset += b.byteLength; });
+        return merged.buffer;
     }
 
-    function renderHistory() {
-        var h    = loadHistory();
-        var wrap = document.getElementById('tts-history-wrap');
-        var list = document.getElementById('tts-history-list');
-        if (!list) return;
-        if (!h.length) { wrap.style.display = 'none'; return; }
-        wrap.style.display = 'block';
-        list.innerHTML = '';
-        h.slice(0, 8).forEach(function(entry) {
-            var item = document.createElement('div');
-            item.className = 'tts-history-item';
-            item.innerHTML =
-                '<div class="tts-history-icon">🔊</div>' +
-                '<div class="tts-history-info">' +
-                    '<div class="tts-history-text" title="' + escHtml(entry.text) + '">' + escHtml(entry.text.substring(0, 60)) + (entry.text.length > 60 ? '…' : '') + '</div>' +
-                    '<div class="tts-history-meta">' + escHtml(entry.voice) + ' · ' + entry.speed + '× · ' + new Date(entry.ts).toLocaleTimeString() + '</div>' +
-                '</div>' +
-                '<div class="tts-history-play">' +
-                    '<button class="tts-btn tts-btn-sm tts-play-history" data-url="' + escAttr(entry.url) + '">▶</button>' +
-                '</div>';
-            item.addEventListener('click', function() {
-                if (entry.url) {
-                    document.getElementById('tts-text').value = entry.text;
-                    updateCharCount();
-                    var audio = document.getElementById('tts-audio');
-                    audio.src = entry.url;
-                    audio.load();
-                    audio.play().catch(function() {});
-                    document.getElementById('tts-player').classList.add('visible');
-                    currentAudioUrl  = entry.url;
-                    currentAudioBlob = null;
-                }
-            });
-            list.appendChild(item);
+    /* ══════════════════════════════════════════════════════════════
+       PLAYBACK
+    ══════════════════════════════════════════════════════════════ */
+    function playBuffer(buf, speed) {
+        if (!$audio) return;
+        var blob = new Blob([buf], { type: 'audio/mpeg' });
+        var url  = URL.createObjectURL(blob);
+        $audio.src = url;
+        $audio.playbackRate = speed || 1.0;
+        $audio.style.display = 'block';
+        if ($browserPlay) $browserPlay.style.display = 'none';
+        $audio.play().catch(function () { showBrowserPlayer(); });
+        lastAudioBuf = buf;
+        if ($dlBtn) {
+            $dlBtn.style.display = 'inline-flex';
+            $dlBtn.onclick = function () {
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'tts-' + Date.now() + '.mp3';
+                a.click();
+            };
+        }
+        var vo = VOICES.find(function (v) { return v.id === selectedVoice; });
+        if ($playerInfo) $playerInfo.textContent = 'Voice: ' + (vo ? vo.flag + ' ' + vo.name : selectedVoice) + '  ·  Speed: ' + speed.toFixed(1) + '×';
+    }
+
+    function showBrowserPlayer() {
+        if ($audio)      $audio.style.display      = 'none';
+        if ($browserPlay)$browserPlay.style.display = 'flex';
+        if ($dlBtn)      $dlBtn.style.display       = 'none';
+        if ($player)     $player.style.display      = 'block';
+    }
+
+    function useBrowserSpeech(text, voice, speed) {
+        if (!('speechSynthesis' in window)) { showError('Text-to-speech is not supported in this browser.'); return; }
+        window.speechSynthesis.cancel();
+        var vo       = VOICES.find(function (v) { return v.id === voice; });
+        var lang     = vo ? (vo.lang || 'en') : 'en';
+        var langMap  = { en:'en-US', ar:'ar-SA', hi:'hi-IN', fr:'fr-FR', de:'de-DE', es:'es-ES',
+                         it:'it-IT', pt:'pt-PT', nl:'nl-NL', pl:'pl-PL', tr:'tr-TR', sv:'sv-SE',
+                         da:'da-DK', nb:'nb-NO', ro:'ro-RO', ru:'ru-RU', ja:'ja-JP', ko:'ko-KR',
+                         zh:'zh-CN', cy:'cy-GB' };
+        var utt      = new SpeechSynthesisUtterance(text);
+        utt.lang     = langMap[lang] || 'en-US';
+        utt.rate     = speed || 1.0;
+        utt.pitch    = (vo && vo.gender === 'M') ? 0.85 : 1.1;
+        var voices   = window.speechSynthesis.getVoices();
+        var match    = voices.find(function (v) { return v.lang.startsWith(utt.lang.slice(0, 2)); });
+        if (match) utt.voice = match;
+        browserUtter = utt;
+        window.speechSynthesis.speak(utt);
+        showBrowserPlayer();
+        if ($playerInfo) $playerInfo.textContent = 'Browser voice (download not available)';
+    }
+
+    if ($playBtn) {
+        $playBtn.addEventListener('click', function () {
+            if (lastAudioBuf) playBuffer(lastAudioBuf, currentSpeed);
+            else if (browserUtter) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(browserUtter); }
+        });
+    }
+    if ($stopBtn) {
+        $stopBtn.addEventListener('click', function () {
+            window.speechSynthesis.cancel();
+            if ($audio) $audio.pause();
         });
     }
 
-    /* ── Char counter ── */
-    function updateCharCount() {
-        var text = document.getElementById('tts-text').value || '';
-        var len  = text.length;
-        var el   = document.getElementById('tts-char-count');
-        if (!el) return;
-        el.textContent = len.toLocaleString() + ' / 5,000 characters';
-        el.className   = 'tts-char-count' + (len > 4500 ? (len >= 5000 ? ' over' : ' warn') : '');
-    }
+    /* ══════════════════════════════════════════════════════════════
+       HISTORY
+    ══════════════════════════════════════════════════════════════ */
+    function loadHistory()  { try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); } catch (e) { return []; } }
+    function saveHistory(h) { try { localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 20))); } catch (e) {} }
 
-    /* ── UI helpers ── */
-    function setGenerating(on) {
-        var btn = document.getElementById('tts-generate-btn');
-        if (btn) btn.disabled = on;
-    }
-    function setStatus(text, show) {
-        var el = document.getElementById('tts-status');
-        var tx = document.getElementById('tts-status-text');
-        if (el) el.className = 'tts-status' + (show ? ' visible' : '');
-        if (tx && text) tx.textContent = text;
-    }
-    function showError(msg) {
-        var el = document.getElementById('tts-error');
-        if (el) { el.textContent = '⚠️ ' + msg; el.className = 'tts-error visible'; }
-    }
-    function hideError() {
-        var el = document.getElementById('tts-error');
-        if (el) el.className = 'tts-error';
-    }
-    function escHtml(s) {
-        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    }
-    function escAttr(s) { return String(s || '').replace(/"/g,'&quot;'); }
-
-    /* ── Init ── */
-    document.addEventListener('DOMContentLoaded', function() {
-
-        /* Load saved preferences before rendering voices */
-        loadPreferences();
-
-        /* Render voice grid */
-        renderVoices('');
-        updateVoiceBadge();
-
-        /* Language filter */
-        var langFilter = document.getElementById('tts-lang-filter');
-        if (langFilter) {
-            langFilter.addEventListener('change', function() {
-                renderVoices(this.value);
-                /* Re-mark selected */
-                document.querySelectorAll('.tts-voice-card').forEach(function(c) {
-                    if (c.dataset.voice === selectedVoice) c.classList.add('selected');
-                });
+    function renderHistory() {
+        var h = loadHistory();
+        if ($histWrap) $histWrap.style.display = h.length ? 'block' : 'none';
+        if (!$histList) return;
+        $histList.innerHTML = '';
+        h.slice(0, 10).forEach(function (item) {
+            var el = document.createElement('div');
+            el.style.cssText = 'padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06);cursor:pointer;transition:background 0.15s;';
+            el.innerHTML =
+                '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">' +
+                    '<div style="font-size:0.83rem;color:#e2e8f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(item.text) + '</div>' +
+                    '<div style="font-size:0.74rem;color:#94a3b8;white-space:nowrap;">' + (item.voiceName || '') + '</div>' +
+                '</div>';
+            el.addEventListener('click', function () {
+                if ($text) $text.value = item.text;
+                var vBtn = $voiceGrid && $voiceGrid.querySelector('[data-voice="' + item.voice + '"]');
+                if (vBtn) vBtn.click();
             });
-        }
+            $histList.appendChild(el);
+        });
+    }
 
-        /* Speed slider */
-        var speedEl = document.getElementById('tts-speed');
-        var speedVal = document.getElementById('tts-speed-val');
-        if (speedEl && speedVal) {
-            speedEl.addEventListener('input', function() {
-                speedVal.textContent = parseFloat(this.value).toFixed(1) + '×';
-                /* Update playback rate live if audio is already loaded */
-                var audio = document.getElementById('tts-audio');
-                if (audio && audio.src) audio.playbackRate = parseFloat(this.value);
-            });
-        }
+    if ($clrHistBtn) {
+        $clrHistBtn.addEventListener('click', function () {
+            if (!confirm('Clear all TTS history?')) return;
+            localStorage.removeItem(HIST_KEY);
+            renderHistory();
+        });
+    }
+    renderHistory();
 
-        /* Char counter */
-        var ta = document.getElementById('tts-text');
-        if (ta) {
-            ta.addEventListener('input', updateCharCount);
-            ta.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); generate(); }
-            });
-        }
+    /* ══════════════════════════════════════════════════════════════
+       GENERATE
+    ══════════════════════════════════════════════════════════════ */
+    async function generate() {
+        var text = $text ? $text.value.trim() : '';
+        if (!text) { showError('Please enter some text to convert.'); return; }
+        if (text.length > 5000) { showError('Text too long. Maximum 5,000 characters.'); return; }
 
-        /* Generate */
-        var genBtn = document.getElementById('tts-generate-btn');
-        if (genBtn) genBtn.addEventListener('click', generate);
+        $genBtn.disabled = true;
+        $genBtn.innerHTML = '<svg style="animation:tts-spin 1s linear infinite" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Generating\u2026';
+        if ($status)     $status.style.display      = 'flex';
+        if ($player)     $player.style.display      = 'none';
+        if ($browserPlay)$browserPlay.style.display = 'none';
+        hideError();
 
-        /* Browser-speech play / stop buttons */
-        var bPlayBtn = document.getElementById('tts-browser-play-btn');
-        if (bPlayBtn) {
-            bPlayBtn.addEventListener('click', function() {
-                if (browserModeText) {
-                    speakWithBrowser(browserModeText, browserModeSpeed).catch(function() {});
+        try {
+            var vo        = VOICES.find(function (v) { return v.id === selectedVoice; });
+            var voiceLang = vo ? (vo.lang || 'en') : 'en';
+            var inputText = text;
+
+            if ($translate && $translate.checked && voiceLang !== 'en') {
+                setStatus('Translating to ' + voiceLang + '\u2026');
+                inputText = await translateText(text, voiceLang);
+            }
+
+            var chunks  = splitText(inputText);
+            var buffers = [];
+            var useBrowser = false;
+
+            for (var i = 0; i < chunks.length; i++) {
+                setStatus('Generating audio' + (chunks.length > 1 ? ' (' + (i + 1) + '/' + chunks.length + ')' : '') + '\u2026');
+                try {
+                    buffers.push(await fetchChunk(chunks[i], selectedVoice));
+                } catch (e) {
+                    useBrowser = true;
+                    break;
                 }
-            });
+            }
+
+            if ($status) $status.style.display = 'none';
+            resetGenBtn();
+
+            if (buffers.length) {
+                var finalBuf = buffers.length === 1 ? buffers[0] : mergeBuffers(buffers);
+                if ($player) $player.style.display = 'block';
+                playBuffer(finalBuf, currentSpeed);
+            } else {
+                useBrowserSpeech(inputText, selectedVoice, currentSpeed);
+                if ($player) $player.style.display = 'block';
+            }
+
+            addToHistory(text, selectedVoice);
+
+        } catch (e) {
+            if ($status) $status.style.display = 'none';
+            resetGenBtn();
+            useBrowserSpeech(text, selectedVoice, currentSpeed);
+            if ($player) $player.style.display = 'block';
         }
-        var bStopBtn = document.getElementById('tts-browser-stop-btn');
-        if (bStopBtn) {
-            bStopBtn.addEventListener('click', function() {
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
-            });
-        }
+    }
 
-        /* Clear */
-        var clearBtn = document.getElementById('tts-clear-btn');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', function() {
-                document.getElementById('tts-text').value = '';
-                updateCharCount();
-                document.getElementById('tts-player').classList.remove('visible');
-                hideError();
-                currentAudioUrl  = null;
-                currentAudioBlob = null;
-                browserModeText  = null;
-                if (window.speechSynthesis) window.speechSynthesis.cancel();
-                /* Reset player to default state */
-                document.getElementById('tts-audio').style.display = '';
-                var bp = document.getElementById('tts-browser-player');
-                if (bp) bp.style.display = 'none';
-            });
-        }
-
-        /* Download */
-        var dlBtn = document.getElementById('tts-download-btn');
-        if (dlBtn) dlBtn.addEventListener('click', download);
-
-        /* Regenerate */
-        var regenBtn = document.getElementById('tts-regen-btn');
-        if (regenBtn) regenBtn.addEventListener('click', generate);
-
-        /* Save preferences */
-        var savePrefBtn = document.getElementById('tts-save-pref-btn');
-        if (savePrefBtn) savePrefBtn.addEventListener('click', savePreferences);
-
-        /* Clear history */
-        var clrHistBtn = document.getElementById('tts-clear-history-btn');
-        if (clrHistBtn) {
-            clrHistBtn.addEventListener('click', function() {
-                if (confirm('Clear audio history?')) {
-                    try { localStorage.removeItem(HISTORY_KEY); } catch(e) {}
-                    renderHistory();
-                }
-            });
-        }
-
-        /* Load history */
+    function addToHistory(text, voice) {
+        var h  = loadHistory();
+        var vo = VOICES.find(function (v) { return v.id === voice; });
+        h.unshift({
+            text:      text.slice(0, 120) + (text.length > 120 ? '\u2026' : ''),
+            voice:     voice,
+            voiceName: vo ? vo.flag + ' ' + vo.name : voice,
+            ts:        Date.now()
+        });
+        saveHistory(h);
         renderHistory();
-    });
+    }
+
+    function resetGenBtn() {
+        $genBtn.disabled = false;
+        $genBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg> Generate Audio';
+    }
+
+    if ($genBtn)   $genBtn.addEventListener('click', generate);
+    if ($regenBtn) $regenBtn.addEventListener('click', generate);
+    if ($clearBtn) {
+        $clearBtn.addEventListener('click', function () {
+            if ($text)      $text.value = '';
+            if ($charCount) $charCount.textContent = '0 / 5,000 characters';
+            if ($player)    $player.style.display   = 'none';
+            hideError();
+            lastAudioBuf = null;
+        });
+    }
+
+    /* ── Helpers ── */
+    function setStatus(t) { if ($statusTxt) $statusTxt.textContent = t; }
+    function showError(m) { if ($error) { $error.textContent = m; $error.style.display = 'block'; } }
+    function hideError()  { if ($error) $error.style.display = 'none'; }
+    function escHtml(s)   { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    /* ── Spin keyframe ── */
+    if (!document.getElementById('tts-spin-kf')) {
+        var kf = document.createElement('style');
+        kf.id  = 'tts-spin-kf';
+        kf.textContent = '@keyframes tts-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+        document.head.appendChild(kf);
+    }
 
 })();
