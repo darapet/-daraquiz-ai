@@ -8,6 +8,10 @@
     var MAX_HISTORY    = 40;
     var MAX_CONTEXT    = 12;
     var GROQ_MODEL     = 'llama-3.1-8b-instant';
+<<<<<<< HEAD
+=======
+    var POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
+>>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
 
     /* ── State ── */
     var currentChatId = null;
@@ -332,6 +336,7 @@
         } catch(e) { return null; }
     }
 
+<<<<<<< HEAD
     /* Groq fallback with alternate models */
     async function callGroqFallback(context) {
         if (typeof window.groqFetch !== 'function') return null;
@@ -351,6 +356,37 @@
             } catch(e) { /* try next */ }
         }
         return null;
+=======
+    async function callPollinations(context) {
+        var MODELS = ['openai-fast', 'openai', 'mistral', 'deepseek'];
+        var controllers = MODELS.map(function() { return new AbortController(); });
+        var promises = MODELS.map(function(model, idx) {
+            var tid = setTimeout(function() { try { controllers[idx].abort(); } catch(e2) {} }, 25000);
+            return fetch(POLLINATIONS_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: controllers[idx].signal,
+                body: JSON.stringify({ model: model, seed: Math.floor(Math.random() * 99999), temperature: 0.7, private: true, messages: context })
+            })
+            .then(function(r) { clearTimeout(tid); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function(d) {
+                var text = (((d.choices || [])[0] || {}).message || {}).content || '';
+                if (!text.trim() || text.trim().length < 3) throw new Error('empty');
+                controllers.forEach(function(c, ci) { if (ci !== idx) { try { c.abort(); } catch(_) {} } });
+                return text.trim();
+            })
+            .catch(function(e) { clearTimeout(tid); return null; });
+        });
+        return new Promise(function(resolve, reject) {
+            var left = promises.length;
+            promises.forEach(function(p) {
+                p.then(function(v) {
+                    if (v !== null) resolve(v);
+                    else { left--; if (left === 0) reject(new Error('All AI sources failed. Check your internet connection and try again.')); }
+                });
+            });
+        });
+>>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     }
 
     async function waitForGroqKeys(ms) {
@@ -416,8 +452,13 @@
 
         try {
             var reply = await callGroq(context);
+<<<<<<< HEAD
             if (!reply) reply = await callGroqFallback(context);
             if (!reply) throw new Error('No response received. Check your Groq API keys in js/aqs-groq-key.js');
+=======
+            if (!reply) reply = await callPollinations(context);
+            if (!reply) throw new Error('No response received. Please try again.');
+>>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
 
             setTyping(false);
             appendMessage('ai', reply);

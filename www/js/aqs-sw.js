@@ -44,7 +44,12 @@ self.addEventListener('fetch', function (e) {
     if (url.indexOf('wp-admin') !== -1) return;
     if (url.indexOf('wp-login') !== -1) return;
     if (!url.startsWith('http')) return;
+<<<<<<< HEAD
     /* Never intercept external API calls (Groq, Hugging Face, Firebase) */
+=======
+    /* Never intercept external API calls (Pollinations, Firebase, Groq) */
+    if (url.indexOf('pollinations.ai') !== -1) return;
+>>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     if (url.indexOf('firebaseapp.com') !== -1) return;
     if (url.indexOf('googleapis.com') !== -1) return;
     if (url.indexOf('groq.com') !== -1) return;

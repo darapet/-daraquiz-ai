@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "915234258423",
+    "firebase_url": "https://smartquiz-darapet-default-rtdb.firebaseio.com",
+    "project_id": "smartquiz-darapet",
+    "storage_bucket": "smartquiz-darapet.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:915234258423:android:b17e8723eeb7d53652c2f2",
+        "android_client_info": {
+          "package_name": "com.darapet.smartquiz"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "915234258423-gqi9kec6h43j728s5lbhpqnnmjp23g5h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.darapet.smartquiz",
+            "certificate_hash": "21d7ac46f4cc16faef6dce1dd2a45f52f40aa419"
+          }
+        },
+        {
+          "client_id": "915234258423-au2kl568mirohob21ejl5n0nrt68bg5r.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBN6D1VsdlQ7GzsNZ617Npuiz3Bnkr2r90"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "915234258423-au2kl568mirohob21ejl5n0nrt68bg5r.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

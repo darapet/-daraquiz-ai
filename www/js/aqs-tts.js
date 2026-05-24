@@ -84,6 +84,7 @@
         { id:'Gwyneth',  name:'Gwyneth',  lang:'cy', flag:'🏴', gender:'F', seed:19001 }
     ];
 
+<<<<<<< HEAD
 
     /* ── Groq TTS voice map (English + Arabic + Hindi only) ── */
     var GROQ_VOICE_MAP = {
@@ -126,6 +127,67 @@
     var $charCount   = document.getElementById('tts-char-count');
     var $translate   = document.getElementById('tts-translate-toggle');
 
+=======
+    /* ── Pollinations voice map ── */
+    var POLLY_TO_POLLINATIONS = {
+        Brian:'onyx',    Amy:'nova',       Emma:'nova',      Joanna:'shimmer',
+        Matthew:'echo',  Joey:'echo',      Justin:'alloy',   Kendra:'shimmer',
+        Kimberly:'alloy',Salli:'fable',    Ivy:'alloy',      Nicole:'shimmer',
+        Russell:'onyx',  Geraint:'echo',   Aditi:'nova',     Raveena:'nova',
+        Zeina:'nova',    Celine:'nova',    Mathieu:'onyx',   Lea:'nova',
+        Hans:'onyx',     Marlene:'shimmer',Vicki:'shimmer',
+        Enrique:'echo',  Conchita:'nova',  Lucia:'shimmer',  Miguel:'echo',
+        Giorgio:'echo',  Carla:'nova',
+        Cristiano:'echo',Ines:'nova',      Ricardo:'onyx',   Vitoria:'fable',
+        Ruben:'echo',    Lotte:'nova',     Jacek:'echo',     Maja:'nova',
+        Filiz:'nova',    Astrid:'nova',    Naja:'nova',      Mads:'echo',
+        Liv:'nova',      Carmen:'nova',    Tatyana:'shimmer',Maxim:'onyx',
+        Mizuki:'nova',   Takumi:'onyx',    Seoyeon:'nova',   Zhiyu:'nova',
+        Gwyneth:'nova'
+    };
+
+    /* ── Groq TTS voice map (English + Arabic + Hindi only) ── */
+    var GROQ_VOICE_MAP = {
+        Brian:'Fritz-PlayAI',    Geraint:'George-PlayAI', Joey:'Atlas-PlayAI',
+        Justin:'Liam-PlayAI',    Matthew:'Tobias-PlayAI', Russell:'Odin-PlayAI',
+        Amy:'Celeste-PlayAI',    Emma:'Eleanor-PlayAI',   Ivy:'Aria-PlayAI',
+        Joanna:'Nova-PlayAI',    Kendra:'Paige-PlayAI',   Kimberly:'Quinn-PlayAI',
+        Salli:'Sally-PlayAI',    Nicole:'Stella-PlayAI',
+        Aditi:'Nia-PlayAI',      Raveena:'Samara-PlayAI',
+        Zeina:'Amira-PlayAI'
+    };
+
+    /* ══════════════════════════════════════════════════════════════
+       DOM REFERENCES
+    ══════════════════════════════════════════════════════════════ */
+    var $text        = document.getElementById('tts-text');
+    var $genBtn      = document.getElementById('tts-generate-btn');
+    var $clearBtn    = document.getElementById('tts-clear-btn');
+    var $badge       = document.getElementById('tts-voice-badge');
+    var $status      = document.getElementById('tts-status');
+    var $statusTxt   = document.getElementById('tts-status-text');
+    var $error       = document.getElementById('tts-error');
+    var $player      = document.getElementById('tts-player');
+    var $audio       = document.getElementById('tts-audio');
+    var $browserPlay = document.getElementById('tts-browser-player');
+    var $playBtn     = document.getElementById('tts-browser-play-btn');
+    var $stopBtn     = document.getElementById('tts-browser-stop-btn');
+    var $dlBtn       = document.getElementById('tts-download-btn');
+    var $regenBtn    = document.getElementById('tts-regen-btn');
+    var $playerInfo  = document.getElementById('tts-player-info');
+    var $histWrap    = document.getElementById('tts-history-wrap');
+    var $histList    = document.getElementById('tts-history-list');
+    var $clrHistBtn  = document.getElementById('tts-clear-history-btn');
+    var $langFilter  = document.getElementById('tts-lang-filter');
+    var $voiceGrid   = document.getElementById('tts-voice-grid');
+    var $speed       = document.getElementById('tts-speed');
+    var $speedVal    = document.getElementById('tts-speed-val');
+    var $savePref    = document.getElementById('tts-save-pref-btn');
+    var $prefSaved   = document.getElementById('tts-pref-saved');
+    var $charCount   = document.getElementById('tts-char-count');
+    var $translate   = document.getElementById('tts-translate-toggle');
+
+>>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     /* ── State ── */
     var selectedVoice = cfg.saved_voice || 'Brian';
     var currentSpeed  = parseFloat(cfg.saved_speed) || 1.0;
@@ -247,6 +309,7 @@
         } catch (e) { clearTimeout(tid); throw e; }
     }
 
+<<<<<<< HEAD
     /* ── Browser Speech fallback (no external service needed) ── */
     function _browserTTSChunk(text, voice) {
         return new Promise(function(resolve, reject) {
@@ -276,6 +339,40 @@
         throw new Error('All TTS services unavailable. Check your Groq key in js/aqs-groq-key.js');
     }
 
+=======
+    /* ── Pollinations TTS (all languages) ── */
+    async function _pollinationsTTSChunk(text, voice) {
+        var polVoice = POLLY_TO_POLLINATIONS[voice] || 'alloy';
+        var voiceObj = VOICES.find(function (v) { return v.id === voice; });
+        var seed     = voiceObj ? voiceObj.seed : Math.floor(Math.random() * 9000 + 1000);
+        var url = 'https://audio.pollinations.ai/' + encodeURIComponent(text) +
+            '?model=openai-audio&voice=' + polVoice + '&seed=' + seed + '&nologo=true&_t=' + Date.now();
+        var ctrl = new AbortController();
+        var tid  = setTimeout(function () { ctrl.abort(); }, 45000);
+        try {
+            var res = await fetch(url, { signal: ctrl.signal, cache: 'no-store' });
+            clearTimeout(tid);
+            if (!res.ok) throw new Error('Pollinations HTTP ' + res.status);
+            return await res.arrayBuffer();
+        } catch (e) { clearTimeout(tid); throw e; }
+    }
+
+    /* ── Main fetchChunk: Groq first → Pollinations fallback ── */
+    async function fetchChunk(text, voice) {
+        try {
+            return await _groqTTSChunk(text, voice);
+        } catch (e) {
+            console.warn('[TTS] Groq failed, falling back to Pollinations:', e.message);
+        }
+        try {
+            return await _pollinationsTTSChunk(text, voice);
+        } catch (e) {
+            console.warn('[TTS] Pollinations failed:', e.message);
+        }
+        throw new Error('All TTS services unavailable');
+    }
+
+>>>>>>> f79fffdcf4158d6103c694b7db20650f3243f080
     /* ── Translate via Groq ── */
     async function translateText(text, targetLang) {
         var LANG_NAMES = {

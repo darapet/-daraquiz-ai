@@ -1,9 +1,16 @@
 {
   "appId": "com.darapet.smartquiz",
-  "appName": "DaraQuiz AI",
+  "appName": "XZILY AI",
   "webDir": "www",
-  "bundledWebRuntime": false,
-  "server": {
-    "androidScheme": "https"
+  "plugins": {
+    "GoogleAuth": {
+      "scopes": ["profile", "email"],
+      "serverClientId": "915234258423-au2kl568mirohob21ejl5n0nrt68bg5r.apps.googleusercontent.com",
+      "forceCodeForRefreshToken": true
+    }
+  },
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": true
   }
 }
