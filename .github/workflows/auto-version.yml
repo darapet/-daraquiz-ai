@@ -1,0 +1,67 @@
+# XZILY AI — Auto Version Bump
+# Runs every time you push to main.
+# Automatically updates:
+#   - www/aqs-sw.js    → CACHE key  (forces browsers to load the new service worker)
+#   - www/version.json → build date (Capacitor app polls this to detect updates)
+#
+# To release a NEW major version (e.g. v4 → v5):
+#   1. Edit www/version.json  and bump "version": "v5"
+#   2. Add the v5 entry at the TOP of the CHANGELOG array in www/js/aqs-pwa.js
+#   3. Push — this workflow auto-bumps the CACHE and build date
+
+name: Auto-update version on push
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    # Skip if the bot itself is committing — prevents infinite loop
+    if: github.actor != 'github-actions[bot]'
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Bump build date + SW cache key
+        run: |
+          BUILD_DATE=$(date +'%Y-%m-%d')
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-6)
+          CACHE_KEY="xzily-$(date +'%Y%m%d')-${SHORT_SHA}"
+
+          echo "New CACHE key : $CACHE_KEY"
+          echo "New build date: $BUILD_DATE"
+
+          # 1. Replace CACHE value in aqs-sw.js
+          sed -i "s/var CACHE = 'xzily-[^']*'/var CACHE = '$CACHE_KEY'/" www/aqs-sw.js
+
+          # 2. Update build fields in version.json without changing version/changes
+          python3 -c "
+          import json, sys
+          with open('www/version.json') as f:
+              d = json.load(f)
+          d['build']     = '$BUILD_DATE'
+          d['build_sha'] = '${SHORT_SHA}'
+          with open('www/version.json', 'w') as f:
+              json.dump(d, f, indent=2)
+          print('version.json updated to build', d['build'], '/ version', d.get('version'))
+          "
+
+      - name: Commit changes (only if something changed)
+        run: |
+          BUILD_DATE=$(date +'%Y-%m-%d')
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add www/aqs-sw.js www/version.json
+          git diff --staged --quiet \
+            && echo "No changes — skipping commit" \
+            || git commit -m "chore: auto-bump build ${BUILD_DATE} [${SHORT_SHA}]"
+
+      - name: Push
+        uses: ad-m/github-push-action@v0.8.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main

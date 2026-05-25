@@ -1,0 +1,14 @@
+{
+  "version": "v4",
+  "date": "May 2026",
+  "build": "2026-05-24",
+  "update_url": "https://darapet.github.io/-daraquiz-ai/",
+  "changes": [
+    "Image generation: Pollinations fallback added",
+    "TTS: all languages + Pollinations audio fallback",
+    "Publish links: fixed for Capacitor app",
+    "Challenge tabs fixed",
+    "Studio typing animation",
+    "Auto-update detection fixed"
+  ]
+}
