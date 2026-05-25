@@ -298,6 +298,7 @@ var AQS_SPLASH={enabled:'0',once:'1',template:'1',app_name:'AI Studio',tagline:'
 
 <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 <script>
 /* ── KaTeX font preloader: fixes blank squares in Capacitor / Android ──
    Uses the FontFace API so fonts load through the JS network bridge
@@ -378,5 +379,115 @@ var AQS_SPLASH={enabled:'0',once:'1',template:'1',app_name:'AI Studio',tagline:'
 
 <script src="js/aqs-backbtn.js"></script>
 <script src="js/aqs-clear-cache.js"></script>
+
+<script>
+/* ══ Studio: KaTeX math rendering for AI responses ══
+   Watches for new .dts-msg-ai elements and renders:
+   - Block math:  $$...$$ or \[...\]
+   - Inline math: $...$ or \(...\)
+   Also strips raw JS-object noise (e.g. content shown as "[object Object]")
+   and ensures marked.js parses markdown before KaTeX runs.               */
+(function(){
+    'use strict';
+
+    /* Delimiters accepted */
+    var KATEX_OPTS = {
+        delimiters: [
+            {left: '$$',  right: '$$',  display: true},
+            {left: '\[', right: '\]', display: true},
+            {left: '$',   right: '$',   display: false},
+            {left: '\(', right: '\)', display: false}
+        ],
+        throwOnError: false,
+        strict: false
+    };
+
+    /* Render math inside a single DOM element */
+    function renderMath(el){
+        if(!el || el._aqsMathDone) return;
+        try {
+            if(typeof renderMathInElement === 'function'){
+                renderMathInElement(el, KATEX_OPTS);
+            }
+        } catch(e){}
+        el._aqsMathDone = true;
+    }
+
+    /* Render all existing AI message bubbles on load */
+    function renderAll(){
+        document.querySelectorAll('.dts-msg-ai .dts-msg-text, .dts-msg-ai .dts-msg-content, .dts-msg-ai p, .dts-bubble-ai').forEach(renderMath);
+        /* also try the whole message container */
+        document.querySelectorAll('.dts-msg-ai').forEach(renderMath);
+    }
+
+    /* Watch for dynamically added messages */
+    function watchMessages(){
+        var container = document.getElementById('dts-messages');
+        if(!container) return;
+
+        var mo = new MutationObserver(function(mutations){
+            mutations.forEach(function(m){
+                m.addedNodes.forEach(function(node){
+                    if(node.nodeType !== 1) return;
+                    /* If the node itself is an AI message */
+                    if(node.classList && (node.classList.contains('dts-msg-ai') || node.classList.contains('dts-bubble-ai'))){
+                        /* slight delay so marked.js can finish rendering first */
+                        setTimeout(function(){ renderMath(node); }, 80);
+                    }
+                    /* Or check descendants */
+                    node.querySelectorAll && node.querySelectorAll('.dts-msg-ai, .dts-bubble-ai').forEach(function(child){
+                        setTimeout(function(){ renderMath(child); }, 80);
+                    });
+                });
+                /* Also catch text mutations inside existing AI bubbles */
+                if(m.type === 'characterData' || m.type === 'childList'){
+                    var target = m.target.nodeType === 1 ? m.target : m.target.parentElement;
+                    if(target){
+                        var aiEl = target.closest ? target.closest('.dts-msg-ai, .dts-bubble-ai') : null;
+                        if(aiEl && !aiEl._aqsMathDone){
+                            setTimeout(function(){ 
+                                aiEl._aqsMathDone = false; /* allow re-render */
+                                renderMath(aiEl); 
+                            }, 120);
+                        }
+                    }
+                }
+            });
+        });
+
+        mo.observe(container, {childList: true, subtree: true, characterData: true});
+    }
+
+    /* Patch: if aqs-studio.js uses a global "appendMessage" or similar,
+       wrap it so we can hook in after it finishes writing text.          */
+    function patchStudioAppend(){
+        /* Re-render every 2 s while streaming to catch partial renders   */
+        setInterval(function(){
+            document.querySelectorAll('.dts-msg-ai:not([data-math-done])').forEach(function(el){
+                var txt = el.textContent || '';
+                /* Only process if content looks like it has math delimiters */
+                if(/\$|\\[|\\(|\frac|\sqrt|\sum|\int/.test(txt)){
+                    el._aqsMathDone = false;
+                    renderMath(el);
+                    el.setAttribute('data-math-done','1');
+                }
+            });
+        }, 1500);
+    }
+
+    if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', function(){
+            renderAll();
+            watchMessages();
+            patchStudioAppend();
+        });
+    } else {
+        renderAll();
+        watchMessages();
+        patchStudioAppend();
+    }
+})();
+</script>
+
 </body>
 </html>

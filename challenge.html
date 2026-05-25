@@ -156,7 +156,7 @@ window.AQS_CHALLENGE = { primary_score: 10, steal_score: 5 };
 })();
 </script>
 
-<div class="aqs-ch-bg" aria-hidden="true">
+<div class="aqs-ch-bg" aria-hidden="true" style="pointer-events:none;position:fixed;inset:0;z-index:0;">
     <div class="aqs-ch-grid"></div>
     <div class="aqs-ch-bg-orb aqs-ch-bg-orb-1"></div>
     <div class="aqs-ch-bg-orb aqs-ch-bg-orb-2"></div>
@@ -169,7 +169,7 @@ window.AQS_CHALLENGE = { primary_score: 10, steal_score: 5 };
     <source src="audio/quiz-background.mp3" type="audio/mpeg">
 </audio>
 
-<div id="aqs-ch-page" class="aqs-ch-page">
+<div id="aqs-ch-page" class="aqs-ch-page" style="position:relative;z-index:1;">
 <div class="aqs-ch-content">
 
 <header class="aqs-ch-topbar">
@@ -632,5 +632,86 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 </script>
 <script src="js/aqs-clear-cache.js"></script>
+
+<script>
+/* ── Challenge page: inline tab & source switching (fallback / reinforcement) ── */
+(function(){
+    'use strict';
+
+    /* ── Join / Host tab switching ── */
+    function initMainTabs(){
+        var tabs = document.querySelectorAll('.aqs-ch-tab-btn[data-tab]');
+        tabs.forEach(function(btn){
+            btn.addEventListener('click', function(e){
+                e.stopPropagation();
+                var target = btn.getAttribute('data-tab');
+                /* Update tab button states */
+                tabs.forEach(function(t){ t.classList.remove('active'); });
+                btn.classList.add('active');
+                /* Show/hide panes */
+                document.querySelectorAll('.aqs-ch-tab-pane').forEach(function(pane){
+                    pane.style.display = 'none';
+                });
+                var pane = document.getElementById('aqs-ch-pane-' + target);
+                if(pane) pane.style.display = 'block';
+            }, {passive:false});
+        });
+    }
+
+    /* ── Question source tab switching (inside Host pane) ── */
+    function initSourceTabs(){
+        var srcTabs = document.querySelectorAll('.aqs-ch-source-tab[data-src]');
+        var srcPanes = {
+            topic:   document.getElementById('aqs-ch-src-topic'),
+            upload:  document.getElementById('aqs-ch-src-upload'),
+            paste:   document.getElementById('aqs-ch-src-paste'),
+            readdoc: document.getElementById('aqs-ch-src-readdoc'),
+            manual:  document.getElementById('aqs-ch-src-manual')
+        };
+
+        srcTabs.forEach(function(btn){
+            btn.addEventListener('click', function(e){
+                e.stopPropagation();
+                var src = btn.getAttribute('data-src');
+                /* Update tab states */
+                srcTabs.forEach(function(t){ t.classList.remove('active'); });
+                btn.classList.add('active');
+                /* Show matching pane */
+                Object.keys(srcPanes).forEach(function(key){
+                    if(srcPanes[key]) srcPanes[key].style.display = (key === src) ? 'block' : 'none';
+                });
+            }, {passive:false});
+        });
+    }
+
+    /* ── Join button — only navigate if aqs-challenge.js hasn't already bound it ── */
+    function initJoinBtn(){
+        var joinBtn = document.getElementById('aqs-ch-join-btn');
+        if(!joinBtn) return;
+        if(joinBtn._aqsInlineBound) return;
+        joinBtn._aqsInlineBound = true;
+        joinBtn.addEventListener('click', function(){
+            var code = (document.getElementById('aqs-ch-join-code')||{}).value || '';
+            var name = (document.getElementById('aqs-ch-join-name')||{}).value || '';
+            if(!code.trim()){ alert('Please enter a challenge code.'); return; }
+            if(!name.trim()){ alert('Please enter your name.'); return; }
+            /* aqs-challenge.js handles the rest; this is a safety net */
+        });
+    }
+
+    if(document.readyState === 'loading'){
+        document.addEventListener('DOMContentLoaded', function(){
+            initMainTabs();
+            initSourceTabs();
+            initJoinBtn();
+        });
+    } else {
+        initMainTabs();
+        initSourceTabs();
+        initJoinBtn();
+    }
+})();
+</script>
+
 </body>
 </html>
