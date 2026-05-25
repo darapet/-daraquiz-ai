@@ -10,12 +10,28 @@
     <link rel="stylesheet" href="css/aqs-splash.css">
     <link rel="stylesheet" href="css/aqs-ads-popup.css">
     <link rel="stylesheet" href="css/aqs-notifications.css">
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" as="style" crossorigin="anonymous">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" as="style">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 
 <!-- Firebase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
 <script type="module" src="js/aqs-firebase.js"></script>
+<script>
+/* ── Auth Guard: redirect unauthenticated users to login ── */
+(function () {
+    var _authTimer = setTimeout(function () {
+        /* Firebase took >8 s — treat as signed-out and redirect */
+        window.location.replace('login.html?redirect=' + encodeURIComponent(window.location.href));
+    }, 8000);
+
+    document.addEventListener('aqsAuthReady', function (e) {
+        clearTimeout(_authTimer);
+        if (!e.detail || !e.detail.uid) {
+            window.location.replace('login.html?redirect=' + encodeURIComponent(window.location.href));
+        }
+    }, { once: true });
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
 </head>
 <body class="aqs-full-page-body">
@@ -64,7 +80,7 @@
 
 <main class="aqs-page-main">
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 
 <div class="aqs-create-wrap" id="aqs-create-form-wrap">
 
@@ -337,6 +353,34 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+<script>
+/* ── KaTeX font preloader: fixes blank squares in Capacitor / Android ──
+   Uses the FontFace API so fonts load through the JS network bridge
+   instead of the CSS engine, which can be blocked in WebViews.        */
+(function () {
+    if (!window.FontFace || typeof katex === 'undefined') return;
+    var base = 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/fonts/';
+    [
+        ['KaTeX_Main',        base + 'KaTeX_Main-Regular.woff2',       'normal', 400],
+        ['KaTeX_Main',        base + 'KaTeX_Main-Bold.woff2',          'normal', 700],
+        ['KaTeX_Main',        base + 'KaTeX_Main-Italic.woff2',        'italic', 400],
+        ['KaTeX_Math',        base + 'KaTeX_Math-Italic.woff2',        'italic', 400],
+        ['KaTeX_Math',        base + 'KaTeX_Math-BoldItalic.woff2',    'italic', 700],
+        ['KaTeX_Size1',       base + 'KaTeX_Size1-Regular.woff2',      'normal', 400],
+        ['KaTeX_Size2',       base + 'KaTeX_Size2-Regular.woff2',      'normal', 400],
+        ['KaTeX_Size3',       base + 'KaTeX_Size3-Regular.woff2',      'normal', 400],
+        ['KaTeX_Size4',       base + 'KaTeX_Size4-Regular.woff2',      'normal', 400],
+        ['KaTeX_AMS',         base + 'KaTeX_AMS-Regular.woff2',        'normal', 400],
+        ['KaTeX_Caligraphic', base + 'KaTeX_Caligraphic-Regular.woff2','normal', 400],
+        ['KaTeX_SansSerif',   base + 'KaTeX_SansSerif-Regular.woff2',  'normal', 400]
+    ].forEach(function (f) {
+        try {
+            new FontFace(f[0], 'url(' + f[1] + ')', { style: f[2], weight: f[3] })
+                .load().then(function (lf) { document.fonts.add(lf); }).catch(function(){});
+        } catch(e) {}
+    });
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"
     onload="if(typeof renderMathInElement==='function'){renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}],throwOnError:false});}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
