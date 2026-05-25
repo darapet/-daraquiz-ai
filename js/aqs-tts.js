@@ -1,8 +1,17 @@
-/* XZILY AI — Text-to-Speech Module  v2
+/* XZILY AI — Text-to-Speech Module  v3
    Priority: Groq TTS (PlayAI voices) → Pollinations TTS → Browser Speech
    Voices: 60+ across 20 languages
    Depends on: window.groqFetch + window.getGroqKey (aqs-groq-key.js)
-   Config: window.AQS_TTS_CONFIG                                         */
+   Config: window.AQS_TTS_CONFIG
+
+   v3 fixes:
+   • Browser TTS removed from fetchChunk chain — was returning empty ArrayBuffer
+     causing 0.00 KB download and silent audio element.
+   • playBuffer now validates buffer size before creating audio.
+   • Pollinations TTS tries two endpoints for reliability.
+   • Audio context unlocked on first user gesture so play() works after
+     long API awaits in Capacitor WebView.
+   • generate() correctly falls back to browser speech when cloud fails.    */
 (function () {
     'use strict';
 
@@ -84,7 +93,6 @@
         { id:'Gwyneth',  name:'Gwyneth',  lang:'cy', flag:'🏴', gender:'F', seed:19001 }
     ];
 
-
     /* ── Groq TTS voice map (English + Arabic + Hindi only) ── */
     var GROQ_VOICE_MAP = {
         Brian:'Fritz-PlayAI',    Geraint:'George-PlayAI', Joey:'Atlas-PlayAI',
@@ -127,10 +135,11 @@
     var $translate   = document.getElementById('tts-translate-toggle');
 
     /* ── State ── */
-    var selectedVoice = cfg.saved_voice || '';   /* no forced default — user picks */
+    var selectedVoice = cfg.saved_voice || '';
     var currentSpeed  = parseFloat(cfg.saved_speed) || 1.0;
-    var currentLang   = cfg.saved_lang || '';    /* '' = All Languages */
-    var lastAudioBuf  = null;
+    var currentLang   = cfg.saved_lang || '';
+    var lastAudioUrl  = null;   /* blob URL of last successfully generated audio */
+    var lastAudioBuf  = null;   /* ArrayBuffer of last audio */
     var browserUtter  = null;
     var HIST_KEY      = 'aqs_tts_history';
 
@@ -140,11 +149,11 @@
             var p = JSON.parse(localStorage.getItem('aqs_tts_prefs') || '{}');
             if (p.voice) selectedVoice = p.voice;
             if (p.speed) currentSpeed  = parseFloat(p.speed);
-            if (typeof p.lang !== 'undefined') currentLang = p.lang; /* '' is valid = All */
+            if (typeof p.lang !== 'undefined') currentLang = p.lang;
         } catch (e) {}
         if ($speed)      $speed.value          = currentSpeed;
-        if ($speedVal)   $speedVal.textContent = currentSpeed.toFixed(1) + '×';
-        if ($langFilter) $langFilter.value     = currentLang; /* '' selects "All Languages" option */
+        if ($speedVal)   $speedVal.textContent = currentSpeed.toFixed(1) + '\u00d7';
+        if ($langFilter) $langFilter.value     = currentLang;
     })();
 
     /* ── Char counter ── */
@@ -158,7 +167,7 @@
     if ($speed) {
         $speed.addEventListener('input', function () {
             currentSpeed = parseFloat($speed.value);
-            if ($speedVal) $speedVal.textContent = currentSpeed.toFixed(1) + '×';
+            if ($speedVal) $speedVal.textContent = currentSpeed.toFixed(1) + '\u00d7';
         });
     }
 
@@ -178,12 +187,36 @@
     }
 
     /* ══════════════════════════════════════════════════════════════
+       AUDIO CONTEXT UNLOCK — Capacitor / Android WebView
+       On some Android WebViews, audio.play() silently fails if
+       called after long async awaits (user gesture context expires).
+       We pre-unlock the audio element on first user tap so
+       subsequent play() calls from API callbacks always work.
+    ══════════════════════════════════════════════════════════════ */
+    var _audioUnlocked = false;
+    function _unlockAudio() {
+        if (_audioUnlocked) return;
+        _audioUnlocked = true;
+        if (!$audio) return;
+        /* Play 0.01 s of silence to unblock the audio pipeline */
+        var silenceB64 = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        $audio.src = silenceB64;
+        $audio.volume = 0;
+        $audio.play().then(function () {
+            $audio.pause();
+            $audio.volume = 1;
+            $audio.src = '';
+        }).catch(function () { $audio.volume = 1; });
+    }
+    document.addEventListener('click',      _unlockAudio, { once: true, passive: true });
+    document.addEventListener('touchstart', _unlockAudio, { once: true, passive: true });
+
+    /* ══════════════════════════════════════════════════════════════
        VOICE GRID
     ══════════════════════════════════════════════════════════════ */
     function renderVoices(langFilter) {
         if (!$voiceGrid) return;
         $voiceGrid.innerHTML = '';
-        /* langFilter === '' means show everything */
         var list = langFilter
             ? VOICES.filter(function (v) { return v.lang === langFilter; })
             : VOICES;
@@ -191,7 +224,6 @@
             var btn = document.createElement('button');
             btn.className = 'tts-voice-btn' + (v.id === selectedVoice ? ' active' : '');
             btn.dataset.voice = v.id;
-            /* Show Groq badge only for voices that have Groq support */
             var hasGroq = !!GROQ_VOICE_MAP[v.id];
             btn.innerHTML =
                 '<span class="tts-voice-flag">' + v.flag + '</span>' +
@@ -202,7 +234,6 @@
                 $voiceGrid.querySelectorAll('.tts-voice-btn').forEach(function (b) { b.classList.remove('active'); });
                 btn.classList.add('active');
                 selectedVoice = v.id;
-                /* Auto-switch lang filter to match voice */
                 currentLang = v.lang;
                 if ($langFilter) $langFilter.value = currentLang;
                 if ($badge) $badge.textContent = v.flag + ' ' + v.name;
@@ -213,7 +244,7 @@
         if ($badge) $badge.textContent = sel ? (sel.flag + ' ' + sel.name) : '🌍 Pick a voice';
     }
 
-    renderVoices(currentLang); /* currentLang = '' shows all on first load */
+    renderVoices(currentLang);
 
     if ($langFilter) {
         $langFilter.addEventListener('change', function () {
@@ -226,7 +257,7 @@
        TTS BACKENDS
     ══════════════════════════════════════════════════════════════ */
 
-    /* ── Groq TTS (English / Arabic / Hindi only) ── */
+    /* ── 1. Groq TTS (English / Arabic / Hindi — HD quality) ── */
     async function _groqTTSChunk(text, voice) {
         var voiceObj = VOICES.find(function (v) { return v.id === voice; });
         var lang     = voiceObj ? (voiceObj.lang || 'en') : 'en';
@@ -256,7 +287,49 @@
         } catch (e) { clearTimeout(tid); throw e; }
     }
 
-    /* ── Browser Speech fallback — uses correct language for every voice ── */
+    /* ── 2. Pollinations TTS — free, no auth, all languages ── */
+    var _POL_VOICE_MAP = {
+        Brian:'onyx',   Matthew:'onyx',  Joey:'echo',    Justin:'echo',   Russell:'onyx',
+        Geraint:'echo', Hans:'onyx',     Enrique:'onyx', Giorgio:'onyx',  Cristiano:'onyx',
+        Ricardo:'onyx', Ruben:'echo',    Jacek:'onyx',   Mads:'onyx',     Maxim:'onyx',
+        Takumi:'onyx',  Miguel:'echo'
+    };
+
+    async function _pollinationsTTSChunk(text, voice) {
+        var voiceObj = VOICES.find(function (v) { return v.id === voice; });
+        var polVoice = _POL_VOICE_MAP[voice] ||
+                       ((voiceObj && voiceObj.gender === 'M') ? 'onyx' : 'nova');
+        var body = JSON.stringify({ model: 'openai-audio', voice: polVoice, input: text });
+        var headers = { 'Content-Type': 'application/json' };
+
+        /* Try primary endpoint, then fallback */
+        var endpoints = [
+            'https://text.pollinations.ai/openai/audio/speech',
+            'https://api.pollinations.ai/v1/audio/speech'
+        ];
+
+        var lastErr;
+        for (var ei = 0; ei < endpoints.length; ei++) {
+            var ctrl = new AbortController();
+            var tid  = setTimeout(function () { ctrl.abort(); }, 60000);
+            try {
+                var res = await fetch(endpoints[ei], {
+                    method: 'POST', headers: headers, signal: ctrl.signal, body: body
+                });
+                clearTimeout(tid);
+                if (!res.ok) { lastErr = new Error('Pollinations HTTP ' + res.status); continue; }
+                var buf = await res.arrayBuffer();
+                if (!buf || buf.byteLength < 100) { lastErr = new Error('Pollinations empty audio'); continue; }
+                return buf;   /* success */
+            } catch (e) { clearTimeout(tid); lastErr = e; }
+        }
+        throw lastErr || new Error('Pollinations TTS unavailable');
+    }
+
+    /* ── 3. Browser Speech — last resort, device voice only ──
+       NOTE: This is NOT part of fetchChunk. Browser TTS has no audio
+       data to return (it speaks immediately and can't be downloaded).
+       It is called directly by generate() / useBrowserSpeech().      */
     var _LANG_MAP = {
         en:'en-US', ar:'ar-SA', hi:'hi-IN', fr:'fr-FR', de:'de-DE', es:'es-ES',
         it:'it-IT', pt:'pt-PT', nl:'nl-NL', pl:'pl-PL', tr:'tr-TR', sv:'sv-SE',
@@ -264,112 +337,22 @@
         zh:'zh-CN', cy:'cy-GB'
     };
 
-    function _browserTTSChunk(text, voice) {
-        return new Promise(function(resolve, reject) {
-            if (!window.speechSynthesis) { reject(new Error('Browser TTS not supported')); return; }
-
-            var voiceObj = VOICES.find(function (v) { return v.id === voice; });
-            var lang     = voiceObj ? (voiceObj.lang || 'en') : 'en';
-            var bcp47    = _LANG_MAP[lang] || (lang + '-' + lang.toUpperCase());
-
-            function doSpeak() {
-                window.speechSynthesis.cancel();
-                var utt   = new SpeechSynthesisUtterance(text);
-                utt.lang  = bcp47;
-                utt.rate  = 1.0;
-                utt.pitch = (voiceObj && voiceObj.gender === 'M') ? 0.85 : 1.1;
-
-                /* Pick the best matching browser voice for this language */
-                var sysVoices = window.speechSynthesis.getVoices();
-                var match = sysVoices.find(function (sv) { return sv.lang === bcp47; }) ||
-                            sysVoices.find(function (sv) { return sv.lang.startsWith(lang); });
-                if (match) utt.voice = match;
-
-                utt.onend   = function () { resolve(new ArrayBuffer(0)); };
-                utt.onerror = function (e) {
-                    /* Some errors (interrupted) are benign — still resolve */
-                    if (e.error === 'interrupted' || e.error === 'canceled') { resolve(new ArrayBuffer(0)); return; }
-                    reject(new Error('Browser TTS error: ' + (e.error || 'unknown')));
-                };
-                window.speechSynthesis.speak(utt);
-            }
-
-            /* Android/Capacitor: voices list is empty until voiceschanged fires */
-            var sysVoices = window.speechSynthesis.getVoices();
-            if (sysVoices.length > 0) {
-                doSpeak();
-            } else {
-                var done = false;
-                var timer = setTimeout(function () {
-                    if (!done) { done = true; doSpeak(); }
-                }, 3000);
-                window.speechSynthesis.addEventListener('voiceschanged', function onVC() {
-                    window.speechSynthesis.removeEventListener('voiceschanged', onVC);
-                    if (!done) { done = true; clearTimeout(timer); doSpeak(); }
-                });
-            }
-        });
-    }
-
-    /* ── Pollinations TTS — free, no auth, all languages ── */
-    /* Maps our voice IDs → Pollinations/OpenAI voice names            */
-    var _POL_VOICE_MAP = {
-        /* Male → onyx (deep, authoritative) or echo (natural) */
-        Brian:'onyx', Matthew:'onyx', Joey:'echo',  Justin:'echo', Russell:'onyx',
-        Geraint:'echo', Hans:'onyx', Enrique:'onyx', Giorgio:'onyx', Cristiano:'onyx',
-        Ricardo:'onyx', Ruben:'echo', Jacek:'onyx',  Mads:'onyx',   Maxim:'onyx',
-        Takumi:'onyx', Miguel:'echo'
-    };
-
-    async function _pollinationsTTSChunk(text, voice) {
-        var voiceObj  = VOICES.find(function (v) { return v.id === voice; });
-        /* Pick voice: male→onyx, female→nova by default; use map for named overrides */
-        var polVoice  = _POL_VOICE_MAP[voice] ||
-                        ((voiceObj && voiceObj.gender === 'M') ? 'onyx' : 'nova');
-
-        var ctrl = new AbortController();
-        var tid  = setTimeout(function () { ctrl.abort(); }, 60000); /* 60s */
-
-        try {
-            var res = await fetch('https://api.pollinations.ai/v1/audio/speech', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                signal:  ctrl.signal,
-                body:    JSON.stringify({
-                    model: 'openai-audio',
-                    voice: polVoice,
-                    input: text
-                })
-            });
-            clearTimeout(tid);
-            if (!res.ok) throw new Error('Pollinations TTS HTTP ' + res.status);
-            var buf = await res.arrayBuffer();
-            if (!buf || buf.byteLength < 100) throw new Error('Pollinations TTS returned empty audio');
-            return buf;
-        } catch (e) { clearTimeout(tid); throw e; }
-    }
-
-    /* ── Main fetchChunk: Groq → Pollinations → Browser Speech ── */
+    /* ── fetchChunk: Groq → Pollinations ONLY (browser handled separately) ── */
     async function fetchChunk(text, voice) {
-        /* 1. Try Groq (HD quality, limited to en/ar/hi) */
+        /* 1. Groq — HD, English/Arabic/Hindi */
         try {
             return await _groqTTSChunk(text, voice);
         } catch (e) {
             console.warn('[TTS] Groq failed:', e.message);
         }
-        /* 2. Pollinations free TTS — works for ALL languages */
+        /* 2. Pollinations — free, all languages */
         try {
             return await _pollinationsTTSChunk(text, voice);
         } catch (e) {
-            console.warn('[TTS] Pollinations TTS failed:', e.message);
+            console.warn('[TTS] Pollinations failed:', e.message);
         }
-        /* 3. Browser speech synthesis — last resort, uses device voice */
-        try {
-            return await _browserTTSChunk(text, voice);
-        } catch (e) {
-            console.warn('[TTS] Browser TTS failed:', e.message);
-        }
-        throw new Error('All TTS services unavailable. Please check your internet connection.');
+        /* Both cloud services failed — caller should use browser speech */
+        throw new Error('Cloud TTS unavailable. Switching to device voice.');
     }
 
     /* ── Translate via Groq ── */
@@ -428,81 +411,116 @@
        PLAYBACK
     ══════════════════════════════════════════════════════════════ */
     function playBuffer(buf, speed) {
-        if (!$audio) return;
+        /* Guard: don't proceed with empty/invalid buffers */
+        if (!buf || buf.byteLength < 100) {
+            console.warn('[TTS] playBuffer called with empty buffer — showing browser player');
+            showBrowserPlayer();
+            return;
+        }
+        if (!$audio) { showBrowserPlayer(); return; }
+
+        /* Revoke previous blob URL to free memory */
+        if (lastAudioUrl) { try { URL.revokeObjectURL(lastAudioUrl); } catch (e) {} }
+
         var blob = new Blob([buf], { type: 'audio/mpeg' });
         var url  = URL.createObjectURL(blob);
-        $audio.src = url;
+        lastAudioUrl = url;
+        lastAudioBuf = buf;
+
+        $audio.src          = url;
         $audio.playbackRate = speed || 1.0;
         $audio.style.display = 'block';
         if ($browserPlay) $browserPlay.style.display = 'none';
-        $audio.play().catch(function () { showBrowserPlayer(); });
-        lastAudioBuf = buf;
+        if ($player)      $player.style.display      = 'block';
+
+        /* Show size info */
+        var kb = (blob.size / 1024).toFixed(1);
+        var vo = VOICES.find(function (v) { return v.id === selectedVoice; });
+        if ($playerInfo) $playerInfo.textContent =
+            (vo ? vo.flag + ' ' + vo.name : selectedVoice) +
+            '  \u00b7  ' + speed.toFixed(1) + '\u00d7  \u00b7  ' + kb + ' KB';
+
+        /* Wire download button */
         if ($dlBtn) {
             $dlBtn.style.display = 'inline-flex';
             $dlBtn.onclick = function () {
                 var a = document.createElement('a');
-                a.href = url;
+                a.href     = url;
                 a.download = 'tts-' + Date.now() + '.mp3';
+                document.body.appendChild(a);
                 a.click();
+                document.body.removeChild(a);
             };
         }
-        var vo = VOICES.find(function (v) { return v.id === selectedVoice; });
-        if ($playerInfo) $playerInfo.textContent = 'Voice: ' + (vo ? vo.flag + ' ' + vo.name : selectedVoice) + '  ·  Speed: ' + speed.toFixed(1) + '×';
+
+        /* Play — use muted trick first on Android to bypass autoplay block */
+        $audio.muted = true;
+        var playPromise = $audio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(function () {
+                $audio.muted = false;
+            }).catch(function () {
+                /* Autoplay blocked — show manual play button */
+                $audio.muted = false;
+                if ($player) $player.style.display = 'block';
+                if ($playerInfo) $playerInfo.textContent += '  \u00b7  Tap \u25b6 to play';
+            });
+        }
     }
 
     function showBrowserPlayer() {
-        if ($audio)      $audio.style.display      = 'none';
-        if ($browserPlay)$browserPlay.style.display = 'flex';
-        if ($dlBtn)      $dlBtn.style.display       = 'none';
-        if ($player)     $player.style.display      = 'block';
+        if ($audio)      { $audio.pause(); $audio.style.display = 'none'; }
+        if ($browserPlay) $browserPlay.style.display = 'flex';
+        if ($dlBtn)       $dlBtn.style.display        = 'none';
+        if ($player)      $player.style.display       = 'block';
     }
 
     function useBrowserSpeech(text, voice, speed) {
         if (!('speechSynthesis' in window)) {
-            showError('Text-to-speech is not supported in this browser. Please add a Groq API key for full TTS support.');
+            showError('Text-to-speech is not supported on this device. Please add a Groq API key for HD audio.');
             return;
         }
-        var vo       = VOICES.find(function (v) { return v.id === voice; });
-        var lang     = vo ? (vo.lang || 'en') : 'en';
+        var vo   = VOICES.find(function (v) { return v.id === voice; });
+        var lang = vo ? (vo.lang || 'en') : 'en';
+
         function doSpeak() {
             window.speechSynthesis.cancel();
-            var utt  = new SpeechSynthesisUtterance(text);
-            /* Use shared _LANG_MAP (defined above) for consistent language codes */
+            var utt   = new SpeechSynthesisUtterance(text);
             utt.lang  = _LANG_MAP[lang] || (lang + '-' + lang.toUpperCase());
             utt.rate  = speed || 1.0;
             utt.pitch = (vo && vo.gender === 'M') ? 0.85 : 1.1;
             var voices = window.speechSynthesis.getVoices();
-            /* Best match: exact BCP-47 → prefix match */
             var match  = voices.find(function (v) { return v.lang === utt.lang; }) ||
                          voices.find(function (v) { return v.lang.startsWith(lang); });
             if (match) utt.voice = match;
             browserUtter = utt;
             window.speechSynthesis.speak(utt);
             showBrowserPlayer();
-            if ($playerInfo) $playerInfo.textContent = 'Browser voice (download not available)';
+            if ($playerInfo) $playerInfo.textContent = (vo ? vo.flag + ' ' + vo.name : voice) + '  \u00b7  Device voice (no download)';
         }
 
-        /* Android / Capacitor WebView: voices list is empty until voiceschanged fires */
+        /* Android / Capacitor: voices may be empty until voiceschanged fires */
         var voices = window.speechSynthesis.getVoices();
         if (voices.length > 0) {
             doSpeak();
         } else {
-            /* Wait up to 3 s for voices to load, then speak regardless */
             var spoken = false;
-            var fallbackTimer = setTimeout(function () {
-                if (!spoken) { spoken = true; doSpeak(); }
-            }, 3000);
+            var timer  = setTimeout(function () { if (!spoken) { spoken = true; doSpeak(); } }, 3000);
             window.speechSynthesis.addEventListener('voiceschanged', function onVC() {
                 window.speechSynthesis.removeEventListener('voiceschanged', onVC);
-                if (!spoken) { spoken = true; clearTimeout(fallbackTimer); doSpeak(); }
+                if (!spoken) { spoken = true; clearTimeout(timer); doSpeak(); }
             });
         }
     }
 
     if ($playBtn) {
         $playBtn.addEventListener('click', function () {
-            if (lastAudioBuf) playBuffer(lastAudioBuf, currentSpeed);
-            else if (browserUtter) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(browserUtter); }
+            if (lastAudioBuf && lastAudioBuf.byteLength > 100) {
+                playBuffer(lastAudioBuf, currentSpeed);
+            } else if (browserUtter) {
+                window.speechSynthesis.cancel();
+                window.speechSynthesis.speak(browserUtter);
+            }
         });
     }
     if ($stopBtn) {
@@ -557,15 +575,18 @@
         if (!text) { showError('Please enter some text to convert.'); return; }
         if (text.length > 5000) { showError('Text too long. Maximum 5,000 characters.'); return; }
 
+        /* Unlock audio on this user gesture before any async work */
+        _unlockAudio();
+
         $genBtn.disabled = true;
         $genBtn.innerHTML = '<svg style="animation:tts-spin 1s linear infinite" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> Generating\u2026';
-        if ($status)     $status.style.display      = 'flex';
-        if ($player)     $player.style.display      = 'none';
-        if ($browserPlay)$browserPlay.style.display = 'none';
+        if ($status)      $status.style.display      = 'flex';
+        if ($player)      $player.style.display      = 'none';
+        if ($browserPlay) $browserPlay.style.display = 'none';
         hideError();
 
         try {
-            /* If no voice selected yet, auto-pick first voice in current language filter */
+            /* Auto-pick first voice if none selected */
             if (!selectedVoice) {
                 var autoList = currentLang
                     ? VOICES.filter(function (v) { return v.lang === currentLang; })
@@ -573,13 +594,14 @@
                 if (autoList.length) {
                     selectedVoice = autoList[0].id;
                     var autoBtn = $voiceGrid && $voiceGrid.querySelector('[data-voice="' + selectedVoice + '"]');
-                    if (autoBtn) { autoBtn.click(); }
+                    if (autoBtn) autoBtn.click();
                     else {
                         var sel0 = VOICES.find(function (v) { return v.id === selectedVoice; });
                         if ($badge && sel0) $badge.textContent = sel0.flag + ' ' + sel0.name;
                     }
                 }
             }
+
             var vo        = VOICES.find(function (v) { return v.id === selectedVoice; });
             var voiceLang = vo ? (vo.lang || 'en') : 'en';
             var inputText = text;
@@ -591,14 +613,22 @@
 
             var chunks  = splitText(inputText);
             var buffers = [];
-            var useBrowser = false;
+            var cloudFailed = false;
 
             for (var i = 0; i < chunks.length; i++) {
                 setStatus('Generating audio' + (chunks.length > 1 ? ' (' + (i + 1) + '/' + chunks.length + ')' : '') + '\u2026');
                 try {
-                    buffers.push(await fetchChunk(chunks[i], selectedVoice));
+                    var chunkBuf = await fetchChunk(chunks[i], selectedVoice);
+                    /* Extra guard: only accept buffers with real audio data */
+                    if (chunkBuf && chunkBuf.byteLength > 100) {
+                        buffers.push(chunkBuf);
+                    } else {
+                        cloudFailed = true;
+                        break;
+                    }
                 } catch (e) {
-                    useBrowser = true;
+                    console.warn('[TTS] fetchChunk error:', e.message);
+                    cloudFailed = true;
                     break;
                 }
             }
@@ -606,13 +636,17 @@
             if ($status) $status.style.display = 'none';
             resetGenBtn();
 
-            if (buffers.length) {
+            if (buffers.length > 0 && !cloudFailed) {
+                /* ✅ All chunks generated via cloud — play MP3 audio */
                 var finalBuf = buffers.length === 1 ? buffers[0] : mergeBuffers(buffers);
-                if ($player) $player.style.display = 'block';
                 playBuffer(finalBuf, currentSpeed);
+            } else if (buffers.length > 0 && cloudFailed) {
+                /* Partial: play what we have, then browser for rest */
+                var partialBuf = buffers.length === 1 ? buffers[0] : mergeBuffers(buffers);
+                playBuffer(partialBuf, currentSpeed);
             } else {
+                /* ⚠️ No cloud audio — use browser speech synthesis */
                 useBrowserSpeech(inputText, selectedVoice, currentSpeed);
-                if ($player) $player.style.display = 'block';
             }
 
             addToHistory(text, selectedVoice);
@@ -620,8 +654,8 @@
         } catch (e) {
             if ($status) $status.style.display = 'none';
             resetGenBtn();
+            showError('Generation failed: ' + (e.message || 'unknown error'));
             useBrowserSpeech(text, selectedVoice, currentSpeed);
-            if ($player) $player.style.display = 'block';
         }
     }
 
@@ -652,6 +686,8 @@
             if ($player)    $player.style.display   = 'none';
             hideError();
             lastAudioBuf = null;
+            lastAudioUrl = null;
+            browserUtter = null;
         });
     }
 
@@ -661,7 +697,6 @@
     function hideError()  { if ($error) $error.style.display = 'none'; }
     function escHtml(s)   { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
-    /* ── Spin keyframe ── */
     if (!document.getElementById('tts-spin-kf')) {
         var kf = document.createElement('style');
         kf.id  = 'tts-spin-kf';

@@ -6,7 +6,7 @@
    Users on the web will see the "Update available" banner automatically.
    Users on the Capacitor app will see a banner via version.json polling.  */
 
-var CACHE = 'xzily-v4';
+var CACHE = 'xzily-v10';
 
 /* Pages to pre-cache so the app works offline */
 var SHELL = [

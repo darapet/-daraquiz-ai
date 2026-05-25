@@ -178,16 +178,71 @@
         return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    /* ── Inline markdown fallback (works even when marked.js CDN fails) ── */
+    function _inlineMD(src) {
+        if (!src) return '';
+        function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+        function inlineFmt(s) {
+            return s
+                .replace(/`([^`
+]+)`/g, '<code>$1</code>')
+                .replace(/\*\*([^*
+]+)\*\*/g, '<strong>$1</strong>')
+                .replace(/__([^_
+]+)__/g, '<strong>$1</strong>')
+                .replace(/\*([^*
+]+)\*/g, '<em>$1</em>')
+                .replace(/_([^_
+]+)_/g, '<em>$1</em>');
+        }
+        var lines = src.replace(/
+/g,'
+').split('
+');
+        var out = [], inCode = false, codeBuf = [], inUL = false, inOL = false;
+        function flushList() {
+            if (inUL) { out.push('</ul>'); inUL = false; }
+            if (inOL) { out.push('</ol>'); inOL = false; }
+        }
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i];
+            if (/^```/.test(ln)) {
+                if (!inCode) { flushList(); inCode = true; codeBuf = []; }
+                else { out.push('<pre><code>' + escHtml(codeBuf.join('
+')) + '</code></pre>'); inCode = false; codeBuf = []; }
+                continue;
+            }
+            if (inCode) { codeBuf.push(ln); continue; }
+            var hm = ln.match(/^(#{1,4})\s+(.*)/);
+            if (hm) { flushList(); var hn = hm[1].length; out.push('<h'+hn+'>'+inlineFmt(hm[2])+'</h'+hn+'>'); continue; }
+            if (/^---+$/.test(ln.trim())) { flushList(); out.push('<hr>'); continue; }
+            var ulm = ln.match(/^[\-\*\+]\s+(.*)/);
+            if (ulm) { if (!inUL) { if(inOL){out.push('</ol>');inOL=false;} out.push('<ul>'); inUL = true; } out.push('<li>'+inlineFmt(ulm[1])+'</li>'); continue; }
+            var olm = ln.match(/^\d+\.\s+(.*)/);
+            if (olm) { if (!inOL) { if(inUL){out.push('</ul>');inUL=false;} out.push('<ol>'); inOL = true; } out.push('<li>'+inlineFmt(olm[1])+'</li>'); continue; }
+            flushList();
+            if (ln.trim() === '') { out.push('<br>'); continue; }
+            out.push('<p>'+inlineFmt(ln)+'</p>');
+        }
+        flushList();
+        if (inCode && codeBuf.length) out.push('<pre><code>'+escHtml(codeBuf.join('
+'))+'</code></pre>');
+        return out.join('');
+    }
+
     var markedReady = false;
     function setupMarked() {
         if (typeof marked !== 'undefined') {
-            marked.setOptions({ breaks: true, gfm: true });
+            try { marked.setOptions({ breaks: true, gfm: true }); } catch(e) {}
             markedReady = true;
         }
     }
     function renderMD(text) {
-        if (!markedReady || typeof marked === 'undefined') return esc(text).replace(/\n/g, '<br>');
-        try { return marked.parse(text); } catch(e) { return esc(text).replace(/\n/g, '<br>'); }
+        if (markedReady && typeof marked !== 'undefined') {
+            try { return marked.parse(text); } catch(e) {}
+        }
+        /* Fallback: inline renderer — handles code blocks, headings, bold, lists */
+        return _inlineMD(text);
     }
     function runKatex(el) {
         if (typeof renderMathInElement !== 'function') return;
